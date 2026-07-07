@@ -198,7 +198,8 @@
       name: "{{ charlie_wiki_editor_user }}"
       email: "{{ charlie_wiki_editor_email }}"
       password: "{{ charlie_wiki_editor_password }}"
-      roles: ["{{ _editor_role_id | int }}"]
+      # whole-string {{ }} -> Ansible preserves the native list[int] type
+      roles: "{{ [ _editor_role_id | int ] }}"
       send_invite: false
     status_code: [200, 201]
   when: >-

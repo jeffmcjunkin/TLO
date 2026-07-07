@@ -60,7 +60,7 @@
   when: charlie_chrome_use_dpapi_injection | bool
 
 - name: Install pycryptodome (AES-GCM for the injector)
-  ansible.windows.win_command: '"{{ charlie_chrome_python_exe }}" -m pip install --disable-pip-version-check pycryptodome'
+  ansible.windows.win_shell: '& "{{ charlie_chrome_python_exe }}" -m pip install --disable-pip-version-check pycryptodome'
   register: _pip_pcd
   changed_when: "'already satisfied' not in _pip_pcd.stdout"
   when: charlie_chrome_use_dpapi_injection | bool

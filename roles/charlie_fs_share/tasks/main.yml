@@ -90,7 +90,9 @@
     name: "{{ charlie_it_share_name }}"
     path: "{{ charlie_it_share_path }}"
     description: "IT installers & field-tech resources (anonymous)"
-    read: "Everyone,Guests"
+    read:
+      - Everyone
+      - Guests
     list: true      # allow the share to be enumerated in a null session
 
 # =============================================================================
@@ -111,8 +113,18 @@
     name: "{{ charlie_backups_share_name }}"
     path: "{{ charlie_backups_share_path }}"
     description: "Nightly config & credential backups"
-    read: "{{ charlie_netbios }}\\Domain Users"
+    read:
+      - "{{ charlie_netbios }}\\Domain Users"
     list: true
+
+# Null-session parameters (NullSessionShares / RestrictNullSessAccess / LSA
+# flags) are only read by the Server service at start, so bounce it now instead
+# of waiting for the provisioning reboot. Persistent shares re-register on start.
+- name: Restart the Server service so anonymous-share settings apply
+  ansible.windows.win_service:
+    name: LanmanServer
+    state: restarted
+    force_dependent_services: true
 
 # =============================================================================
 # Plant the loot

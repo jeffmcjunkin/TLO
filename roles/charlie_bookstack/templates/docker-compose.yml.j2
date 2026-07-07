@@ -15,10 +15,13 @@ services:
     volumes:
       - {{ charlie_bookstack_dir }}/db:/config
     healthcheck:
-      test: ["CMD", "mariadb-admin", "ping", "-h", "127.0.0.1", "-uroot", "-p{{ charlie_bookstack_db_root_password }}"]
+      # tolerate either client binary across linuxserver/mariadb versions;
+      # $$VAR is compose-escaped so the shell reads the container env at runtime
+      test: ["CMD-SHELL", "mariadb-admin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD || mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD"]
       interval: 10s
       timeout: 5s
-      retries: 12
+      retries: 18
+      start_period: 30s
     restart: unless-stopped
 
   {{ charlie_bookstack_name }}:

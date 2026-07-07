@@ -50,7 +50,7 @@
     password: "{{ charlie_reuben_password }}"
     # Do not force a reset -- autologon needs a stable, known password.
     password_never_expires: true
-    update_password: on_create
+    update_password: when_changed
     upn: "{{ charlie_reuben_username }}@{{ charlie_fqdn }}"
     description: "Reuben Ashford - Sales. Workstation AREUBEN-WS."
     enabled: true
@@ -68,7 +68,7 @@
     surname: Admin
     password: "{{ charlie_helpdesk_admin_password }}"
     password_never_expires: true
-    update_password: on_create
+    update_password: when_changed
     upn: "{{ charlie_helpdesk_admin_username }}@{{ charlie_fqdn }}"
     description: "Helpdesk administrator - workstation support (local admin on AREUBEN-WS)."
     enabled: true
@@ -90,7 +90,7 @@
     surname: Helpdesk
     password: "{{ charlie_asrep_password }}"
     password_never_expires: true
-    update_password: on_create
+    update_password: when_changed
     upn: "{{ charlie_asrep_user }}@{{ charlie_fqdn }}"
     description: "Legacy helpdesk automation account. Kerberos pre-auth disabled for an old ticketing integration."
     enabled: true
@@ -138,7 +138,7 @@
     surname: "{{ charlie_webed_lastname }}"
     password: "{{ charlie_webed_password }}"
     password_never_expires: true
-    update_password: on_create
+    update_password: when_changed
     upn: "{{ charlie_webed_username }}@{{ charlie_fqdn }}"
     description: "IT wiki editor."
     enabled: true
