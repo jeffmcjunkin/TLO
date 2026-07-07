@@ -215,7 +215,9 @@ ludus:
       ludus_mssql_enable_xp_cmdshell: true
       ludus_mssql_enable_sa: true
       ludus_mssql_sa_password: "S3rver_S@_OSCAR!"
-      ludus_mssql_svc_account: "OSCAR\\svc_mssql"
+      # NOTE: ludus_mssql can't set a domain-svc-account password, so SQL installs as the
+      # default account; oscar_appdb then switches the service to svc_mssql (SMO SetServiceAccount)
+      # so the M5 constrained-delegation chain (SPN under svc_mssql) works.
       ludus_mssql_sql_users:
         - { username: "appsvc", password: "AppSvc_P@ss1", sysadmin: true }
       ludus_mssql_sysadmins:

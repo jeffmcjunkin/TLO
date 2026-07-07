@@ -2,6 +2,25 @@
 # Runs on OSCAR-DB after badsectorlabs.ludus_mssql. Creates AppDb + seed data via sqlcmd
 # (authenticated as sa, which the mssql role enabled). Idempotent (guards inside the .sql).
 
+- name: Switch the SQL Server service to run as svc_mssql (M5 delegation principal)
+  # ludus_mssql installs SQL as the default account; use SMO SetServiceAccount (which
+  # also fixes file ACLs + grants Log-on-as-a-service) to run SQL as the domain account.
+  ansible.windows.win_powershell:
+    script: |
+      $acct = "{{ oscar_mssql_svc_account }}"
+      $pw   = "{{ oscar_mssql_svc_password }}"
+      [void][System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SqlWmiManagement")
+      $mc  = New-Object Microsoft.SqlServer.Management.Smo.Wmi.ManagedComputer
+      $svc = $mc.Services["MSSQLSERVER"]
+      if ($svc.ServiceAccount -ieq $acct) { $Ansible.Changed = $false; return }
+      $svc.SetServiceAccount($acct, $pw)
+      $svc.Stop(); Start-Sleep -Seconds 5; $svc.Start(); Start-Sleep -Seconds 8
+      $Ansible.Changed = $true
+  register: _sql_svc_acct
+  retries: 2
+  delay: 10
+  until: _sql_svc_acct is succeeded
+
 - name: Copy AppDb seed script to the DB host
   ansible.windows.win_copy:
     src: appdb_seed.sql

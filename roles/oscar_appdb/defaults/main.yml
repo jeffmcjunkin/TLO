@@ -2,3 +2,11 @@
 oscar_appdb_name: AppDb
 # Copied to the DB host then executed with sqlcmd under the deploy (local admin) context.
 oscar_appdb_sql_remote_path: 'C:\Windows\Temp\appdb_seed.sql'
+
+# sa login (must match range-config's ludus_mssql_sa_password on OSCAR-DB).
+oscar_mssql_sa_password: "S3rver_S@_OSCAR!"
+
+# Switch the SQL service to run as the domain delegation account after install
+# (ludus_mssql can't set a domain-svc password). Must match oscar_kcd's svc_mssql.
+oscar_mssql_svc_account: "OSCAR\\svc_mssql"
+oscar_mssql_svc_password: "Sql!Svc_Oscar1"
