@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=https://docs.ludus.cloud/schemas/range-config.json
+#
+# The Last Ones (TLO) — Ludus range definition
+# ---------------------------------------------
+# This file is generated/assembled during the build. The authoritative host inventory,
+# VLAN plan, and firewall ruleset live in docs/architecture.md and are rendered here.
+#
+# Networks (each an isolated VLAN):
+#   VLAN 99  Attacker  (Mythic C2, Kali)
+#   VLAN 10  External  (VPN portal, DNS)
+#   VLAN 20  CHARLIE   charlie.local
+#   VLAN 30  OSCAR     oscar.local
+#   VLAN 40  ALPHA     alpha.local
+#
+# NOTE: placeholder — populated by the synthesis + build phases.
+
+ludus: []
+
+# network: {}      # inter-VLAN firewall — gates the milestone order
+# defaults: {}     # AD-wide settings

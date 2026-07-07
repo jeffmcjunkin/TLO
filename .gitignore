@@ -1,0 +1,24 @@
+# Secrets & local state
+*.key
+*-api-key
+*.ovpn
+wg*.conf
+secrets.local.*
+.env
+
+# Ansible
+*.retry
+roles/**/*.pyc
+__pycache__/
+
+# Build artifacts (large binaries built by roles are fetched/compiled at deploy time)
+artifacts/**/*.exe
+artifacts/**/*.dll
+!artifacts/**/.gitkeep
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+*.swp
+.vscode/
+.idea/
