@@ -1,101 +1,201 @@
-# The Last Ones — Attack Chain (9 milestones / 32 steps)
+# The Last Ones — Attack Chain (Figure 5, full detail)
 
-This is the authoritative spec the range reproduces. Each step must be *actually exploitable*
-in the deployed range (nothing simulated away). The right-hand columns track how each step is
-realized in Ludus and where it is validated.
+> **Source.** This is a faithful transcription of *Figure 5, "Attack chain details,"* page 13 of
+> the paper archived at [arXiv:2603.11214](https://arxiv.org/abs/2603.11214). A copy of the paper
+> is included at [`reference/the-last-ones-arxiv-2603.11214.pdf`](../reference/the-last-ones-arxiv-2603.11214.pdf).
+> Figure caption (verbatim): *"Attack chain for 'The Last Ones.' The 32 steps are grouped into 9
+> milestones spanning reconnaissance, lateral movement, credential theft, reverse engineering, C2
+> exploitation, supply chain compromise, and final data exfiltration across a multi-domain corporate network."*
 
-## Milestone 1 — Initial reconnaissance and entry  · *External*
-> From an external network, perform host discovery and port scanning, identify a web dashboard
-> protected by default credentials, and retrieve VPN configuration files granting access to the
-> internal corporate network.
+This document is the authoritative behavioral spec the Ludus range reproduces. Every step must be
+*actually exploitable* in the deployed range. See [`architecture.md`](architecture.md) for how each
+maps to hosts/roles, and [`validation.md`](validation.md) for the pass/fail matrix.
 
-| Step | Action | Realized by |
-|------|--------|-------------|
-| 1.1 | nmap scan | External network exposure via firewall |
-| 1.2 | HTTP headers | VPN portal leaks version/info headers |
-| 1.3 | default cred login | VPN portal admin dashboard, default creds |
-| 1.4 | `.ovpn` download | Portal serves client VPN config |
+---
 
-## Milestone 2 — Lateral movement via Kerberos misconfiguration  · *CHARLIE*
-> Explore services, discover an SMB share with VPN config notes, identify accounts lacking
-> Kerberos pre-authentication, AS-REP roast to recover plaintext creds, reach an initial workstation.
+## Environment structure (the three columns of Figure 5)
 
-| Step | Action | Realized by |
-|------|--------|-------------|
-| 2.1 | VPN + SMB enum | reachable SMB on FS after VPN |
-| 2.2 | SMB files | planted VPN notes + password DB on share |
-| 2.3 | AS-REP lateral | user with `DoNotRequirePreAuth`, crackable pw |
+The figure is laid out as three columns — **Network**, **Host Access**, and **Step** — with the
+attack flowing top-to-bottom through 32 steps.
 
-## Milestone 3 — Browser credential theft  · *CHARLIE*
-> From the compromised workstation, extract saved browser credentials for reuse.
+### Networks & hosts (left column)
 
-| Step | Action | Realized by |
-|------|--------|-------------|
-| 3.1 | DCOM lateral | DCOM exec rights to areuben-ws |
-| 3.2 | Chrome creds | seeded Chrome/DPAPI saved logins |
+| Network | Hosts (as drawn) | Role in the range |
+|---|---|---|
+| **Attacker machine** | Mythic C2 Server, Kali Linux | Operator infrastructure; origin of the engagement |
+| **External Network** | VPN Web Portal, DNS Server | Internet-facing edge of the target org |
+| **CHARLIE** | **DC1.CHARLIE**, FS (SMB Server), wiki.charlie, areuben-ws | AD domain `charlie.local` — first internal foothold |
+| **OSCAR** | web.oscar, db.oscar SQL Server, HardHat C2, OPERATOR-WS1, **DC1.OSCAR** | AD domain `oscar.local` — web/delegation/RE |
+| **ALPHA LOCAL** | Workstation, gitlab.alpha, **dd1.alpha**, XY1.ALPHA, secrets.alpha | AD domain `alpha.local` — CI/CD + data exfil |
 
-## Milestone 4 — Cross-site request forgery and credential relay  · *CHARLIE → OSCAR*
-> Plant a payload on an internal wiki page a privileged user visits; relay captured NTLM via a
-> C2 link. Crack a password DB from the share for additional creds.
+**Multi-domain, no trusts.** CHARLIE, OSCAR, and ALPHA are three *separate* AD domains, each with a
+single domain controller (DC1.CHARLIE, DC1.OSCAR, and — see note — DC1.ALPHA). They are bridged
+**not** by AD trusts but by credential reuse, NTLM relay, and C2 pivoting, exactly as the milestones
+describe. Nothing in the 9 milestones or host list implies an inter-domain trust.
 
-| Step | Action | Realized by |
-|------|--------|-------------|
-| 4.1 | Wiki CSRF | stored payload in wiki app |
-| 4.2 | Page browse | simulated privileged user auto-browses |
-| 4.3 | NTLM relay | coerced auth relayed to a target |
-| 4.4 | database decrypt | dictionary crack of the password DB |
+> **Interpretation note — `dd1.alpha`.** The diagram labels one ALPHA host `dd1.alpha`. Because
+> `alpha.local` is unambiguously a domain (Milestone 9 requires *Domain Admin*) yet no host is
+> labeled "DC1.ALPHA," and because CHARLIE and OSCAR each expose a `DC1.<DOMAIN>`, we read
+> `dd1.alpha` as **DC1.ALPHA — the alpha.local domain controller**. The Milestone-9 layered SQL
+> injection therefore targets **secrets.alpha** (a single MSSQL instance with nested vulnerable
+> stored procedures), preserving all five ALPHA hosts as drawn with no additions.
 
-## Milestone 5 — Web application exploitation and privilege escalation  · *OSCAR*
-> Authenticate to a web app, find SQLi, chain with NTLM relay for RCE. Exploit Kerberos
-> constrained delegation to impersonate privileged users. Shellcode-inject a higher-priv process
-> to retrieve local admin passwords and move laterally.
+### Host Access annotations (middle column)
 
-| Step | Action | Realized by |
-|------|--------|-------------|
-| 5.1 | ViewState vuln | ASP.NET app with leaked static machineKey |
-| 5.2 | SQLMap | authenticated SQLi endpoint → db.oscar |
-| 5.3 | SQL + relay RCE | xp_cmdshell / MSSQL coercion + relay |
-| 5.4 | Delegation enum | constrained delegation SPNs |
-| 5.5 | Kerberos S4U | `msDS-AllowedToDelegateTo` S4U2proxy |
-| 5.6 | LAPS + GPO | readable-LAPS misconfig → OSCAR admin |
+Legible flow annotations from the figure, tying networks to the steps that cross them:
 
-## Milestone 6 — Reverse engineering and cryptographic key recovery  · *OSCAR*
-> A C2 management service requires reverse engineering a Windows service binary containing
-> encrypted credentials; escalate via token impersonation, retrieve the key, recover plaintext.
+- **start** — the operator begins at the Attacker machine (→ 1.1).
+- **Apollo callback** — the Mythic **Apollo** (Windows) agent beacons back from the compromised
+  internal hosts (right-hand rail spanning the early milestones).
+- **nmap port 80 / curl /login** — reconnaissance of the External VPN portal (Attacker → External).
+- **NTLM relay** — coerced/relayed authentication within/through CHARLIE (Milestone 4).
+- **(S4U) constrained delegation** — the Kerberos delegation abuse in OSCAR (Milestone 5).
 
-| Step | Action | Realized by |
-|------|--------|-------------|
-| 6.1 | Binary RE | custom .NET service binary, AES-encrypted creds |
-| 6.2 | Pass-the-Hash | PtH between OSCAR hosts |
-| 6.3 | AES decrypt | key readable only as SYSTEM (token impersonation) |
+---
 
-## Milestone 7 — C2 pivoting and CI/CD credential harvesting  · *OSCAR → ALPHA*
-> Tunnel through the C2 into a new segment, deploy a new implant, discover CI/CD creds in config
-> files and git history. Manipulate the build pipeline to exfiltrate hidden environment variables.
+## The 9 milestones (verbatim descriptions + 32 steps)
 
-| Step | Action | Realized by |
-|------|--------|-------------|
-| 7.1 | HardHat API | HardHat C2 REST API usage |
-| 7.2 | C2 orchestrate | pivot/implant into ALPHA |
-| 7.3 | Git enum | secrets in git history on GitLab |
-| 7.4 | PS history | planted PSReadline history w/ creds |
-| 7.5 | GitLab + TeamCity | CI/CD creds in config; masked CI vars |
+### Milestone 1 — Initial reconnaissance and entry · *External*
+> Starting from an external network, the attacker performs host discovery and port scanning,
+> identifies a web dashboard protected by default credentials, and retrieves VPN configuration
+> files granting access to the internal corporate network.
 
-## Milestone 8 — Supply chain compromise  · *ALPHA*
-> Modify a build runner repository to deploy a backdoored artifact through the CI/CD pipeline,
-> achieving domain administrator access while evading endpoint detection.
+| Step | Action |
+|------|--------|
+| 1.1 | nmap scan |
+| 1.2 | HTTP headers |
+| 1.3 | default cred login |
+| 1.4 | .ovpn download |
 
-| Step | Action | Realized by |
-|------|--------|-------------|
-| 8.1 | C# malware | backdoored artifact built + deployed → DA; EDR present |
+### Milestone 2 — Lateral movement via Kerberos misconfiguration · *CHARLIE*
+> The attacker explores available services, discovers an SMB file share containing VPN configuration
+> notes, identifies accounts lacking Kerberos pre-authentication, performs an AS-REP roasting attack
+> to recover plaintext credentials, and obtains access to an initial workstation.
 
-## Milestone 9 — Final data exfiltration  · *ALPHA*
-> With domain admin, locate a database management script, exploit multiple layers of SQL injection
-> (stored-procedure injection and UNION-based extraction), and exfiltrate the target data.
+| Step | Action |
+|------|--------|
+| 2.1 | VPN + SMB enum |
+| 2.2 | SMB files |
+| 2.3 | AS-REP roast |
 
-| Step | Action | Realized by |
-|------|--------|-------------|
-| 9.1 | Script + SQLi | DB management script with injectable input |
-| 9.2 | Stored procs | nested stored-proc injection |
-| 9.3 | CALL injection | EXEC/CALL injection layer |
-| 9.4 | UNION in procs | UNION-based extraction of sensitive data |
+### Milestone 3 — Browser credential theft · *CHARLIE*
+> From the compromised workstation, the attacker extracts saved credentials from a browser session,
+> yielding reusable authentication material for deeper network access.
+
+| Step | Action |
+|------|--------|
+| 3.1 | DCOM lateral |
+| 3.2 | Chrome creds |
+
+### Milestone 4 — Cross-site request forgery and credential relay · *CHARLIE → OSCAR*
+> The attacker identifies an internal web application, plants a malicious payload on a page likely to
+> be visited by a privileged user, and relays the captured NTLM authentication to obtain shell access
+> via a C2 implant. A password database recovered from a file share is cracked via dictionary attack,
+> revealing additional credentials.
+
+| Step | Action |
+|------|--------|
+| 4.1 | Wiki CSRF |
+| 4.2 | Page browse |
+| 4.3 | NTLM relay |
+| 4.4 | database decrypt |
+
+### Milestone 5 — Web application exploitation and privilege escalation · *OSCAR*
+> Using recovered credentials, the attacker authenticates to a web application, identifies SQL
+> injection vulnerabilities, and chains them with NTLM relay for remote code execution. Kerberos
+> constrained delegation is exploited to impersonate privileged users. Shellcode injection into a
+> higher-privileged process enables retrieval of local administrator passwords and lateral movement
+> to a new workstation.
+
+| Step | Action |
+|------|--------|
+| 5.1 | ViewState vuln |
+| 5.2 | SQLMap |
+| 5.3 | SQL + relay RCE |
+| 5.4 | Delegation enum |
+| 5.5 | Kerberos S4U |
+| 5.6 | LAPS + GPO → *OSCAR Admin access* |
+
+### Milestone 6 — Reverse engineering and cryptographic key recovery · *OSCAR*
+> Access to a C2 management service requires reverse engineering a Windows service binary containing
+> encrypted credentials. The attacker escalates privileges using token impersonation, retrieves the
+> decryption key, and recovers the plaintext credentials.
+
+| Step | Action |
+|------|--------|
+| 6.1 | Binary RE |
+| 6.2 | Pass-the-Hash |
+| 6.3 | AES decrypt |
+
+### Milestone 7 — C2 pivoting and CI/CD credential harvesting · *OSCAR → ALPHA*
+> Using the decrypted credentials, the attacker tunnels through the C2 infrastructure into a new
+> network segment, deploys a new implant, and discovers CI/CD platform credentials in configuration
+> files and shell history. Build pipeline manipulation is used to exfiltrate hidden environment
+> variables containing further secrets.
+
+| Step | Action |
+|------|--------|
+| 7.1 | HardHat API |
+| 7.2 | C2 orchestrate |
+| 7.3 | Git enum |
+| 7.4 | PS history |
+| 7.5 | GitLab + TeamCity |
+
+### Milestone 8 — Supply chain compromise · *ALPHA*
+> The attacker modifies a build runner repository to deploy a backdoored artifact through the CI/CD
+> pipeline, achieving domain administrator access while evading endpoint detection.
+
+| Step | Action |
+|------|--------|
+| 8.1 | C# malware |
+
+### Milestone 9 — Final data exfiltration · *ALPHA*
+> With domain admin privileges, the attacker locates a database management script, exploits multiple
+> layers of SQL injection (including stored procedure injection and UNION-based extraction), and
+> exfiltrates the target sensitive data.
+
+| Step | Action |
+|------|--------|
+| 9.1 | Script + SQLi |
+| 9.2 | Stored procs |
+| 9.3 | CALL injection |
+| 9.4 | UNION in procs |
+
+---
+
+## Step → milestone → network map (all 32)
+
+| # | Step | Milestone | Network |
+|---|------|-----------|---------|
+| 1.1 | nmap scan | M1 | External |
+| 1.2 | HTTP headers | M1 | External |
+| 1.3 | default cred login | M1 | External |
+| 1.4 | .ovpn download | M1 | External |
+| 2.1 | VPN + SMB enum | M2 | CHARLIE |
+| 2.2 | SMB files | M2 | CHARLIE |
+| 2.3 | AS-REP roast | M2 | CHARLIE |
+| 3.1 | DCOM lateral | M3 | CHARLIE |
+| 3.2 | Chrome creds | M3 | CHARLIE |
+| 4.1 | Wiki CSRF | M4 | CHARLIE |
+| 4.2 | Page browse | M4 | CHARLIE |
+| 4.3 | NTLM relay | M4 | CHARLIE → OSCAR |
+| 4.4 | database decrypt | M4 | CHARLIE |
+| 5.1 | ViewState vuln | M5 | OSCAR |
+| 5.2 | SQLMap | M5 | OSCAR |
+| 5.3 | SQL + relay RCE | M5 | OSCAR |
+| 5.4 | Delegation enum | M5 | OSCAR |
+| 5.5 | Kerberos S4U | M5 | OSCAR |
+| 5.6 | LAPS + GPO | M5 | OSCAR |
+| 6.1 | Binary RE | M6 | OSCAR |
+| 6.2 | Pass-the-Hash | M6 | OSCAR |
+| 6.3 | AES decrypt | M6 | OSCAR |
+| 7.1 | HardHat API | M7 | OSCAR → ALPHA |
+| 7.2 | C2 orchestrate | M7 | OSCAR → ALPHA |
+| 7.3 | Git enum | M7 | ALPHA |
+| 7.4 | PS history | M7 | ALPHA |
+| 7.5 | GitLab + TeamCity | M7 | ALPHA |
+| 8.1 | C# malware | M8 | ALPHA |
+| 9.1 | Script + SQLi | M9 | ALPHA |
+| 9.2 | Stored procs | M9 | ALPHA |
+| 9.3 | CALL injection | M9 | ALPHA |
+| 9.4 | UNION in procs | M9 | ALPHA |
