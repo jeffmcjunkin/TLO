@@ -304,6 +304,7 @@ ludus:
     dns_rewrites:
       - gitlab.alpha.local
     roles:
+      - alpha_gitlab_prereqs        # CUSTOM: ensure ca-certificates before GitLab install (curl --cacert)
       - geerlingguy.gitlab          # Galaxy: GitLab CE omnibus (added by install-roles.sh)
       - alpha_gitlab_seed           # CUSTOM: project + crafted git history secret + masked CI vars + .gitlab-ci.yml
     role_vars:

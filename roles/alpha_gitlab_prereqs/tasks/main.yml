@@ -1,0 +1,14 @@
+---
+- name: Ensure CA certificates + curl are present (GitLab repo script uses curl --cacert)
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - curl
+      - gnupg
+    state: present
+    update_cache: true
+
+- name: Regenerate the CA certificate bundle
+  ansible.builtin.command: update-ca-certificates
+  register: _ca_update
+  changed_when: "'added' in _ca_update.stdout or 'removed' in _ca_update.stdout"

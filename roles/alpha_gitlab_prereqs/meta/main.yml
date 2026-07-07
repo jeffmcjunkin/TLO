@@ -1,0 +1,19 @@
+---
+# alpha_gitlab_prereqs — ensure the CA bundle exists before geerlingguy.gitlab runs.
+# The GitLab repo-setup script calls `curl --cacert /etc/ssl/certs/ca-certificates.crt`,
+# which fails (curl 77) if ca-certificates isn't installed on the Debian template.
+dependencies: []
+
+galaxy_info:
+  role_name: alpha_gitlab_prereqs
+  author: TLO range
+  description: Install ca-certificates/curl on the GitLab host before install.
+  license: GPL-3.0-or-later
+  min_ansible_version: "2.14"
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm
+  galaxy_tags:
+    - ludus
+    - gitlab
