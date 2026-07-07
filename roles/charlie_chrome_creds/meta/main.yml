@@ -1,0 +1,23 @@
+---
+# charlie_chrome_creds -- seed reuben's saved Chrome login for the wiki (M3.2)
+dependencies: []
+
+galaxy_info:
+  role_name: charlie_chrome_creds
+  author: TLO range authoring
+  description: >-
+    Seeds reuben's saved Chrome login for http://wiki.charlie.local on
+    AREUBEN-WS so it is DPAPI-dumpable after compromise (M3.2). Disables Chrome
+    App-Bound Encryption and injects a real v10 credential via a logon
+    scheduled task running as reuben; ships CSV + Credential Manager fallbacks.
+  company: TLO
+  license: MIT
+  min_ansible_version: "2.12"
+  platforms:
+    - name: Windows
+      versions:
+        - "11"
+
+collections:
+  - ansible.windows
+  - chocolatey.chocolatey

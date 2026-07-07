@@ -1,0 +1,68 @@
+# {{ ansible_managed }}
+# Runs AS {{ charlie_chrome_reuben_domain }}\{{ charlie_chrome_reuben_user }} at
+# logon (autologon). Seeds his saved Chrome login for the wiki (M3.2). Best
+# effort: the primary DPAPI injection may fail on some Chrome builds, so the
+# CSV + Credential Manager fallbacks always run.
+$ErrorActionPreference = 'Continue'
+$log = Join-Path $env:LOCALAPPDATA 'tlo_seed_chrome.log'
+function Log([string]$m) { "{0}  {1}" -f (Get-Date -Format o), $m | Out-File -Append -Encoding utf8 $log }
+Log "=== seed_chrome_login start (user=$env:USERNAME) ==="
+
+$stage = '{{ charlie_chrome_stage_dir }}'
+$py    = '{{ charlie_chrome_python_exe | default("python") }}'
+$url   = '{{ charlie_wiki_login_url }}'
+$realm = '{{ charlie_wiki_url }}/'
+$user  = '{{ charlie_wiki_editor_email }}'
+$pass  = '{{ charlie_wiki_editor_password }}'
+
+$udir       = Join-Path $env:LOCALAPPDATA 'Google\Chrome\User Data'
+$localstate = Join-Path $udir 'Local State'
+$chrome = @(
+  "$env:ProgramFiles\Google\Chrome\Application\chrome.exe",
+  "${env:ProgramFiles(x86)}\Google\Chrome\Application\chrome.exe",
+  "$env:LOCALAPPDATA\Google\Chrome\Application\chrome.exe"
+) | Where-Object { Test-Path $_ } | Select-Object -First 1
+
+# 1) close Chrome so the Login Data SQLite DB is unlocked
+Get-Process chrome -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Start-Sleep -Seconds 2
+
+{% if charlie_chrome_use_dpapi_injection %}
+# 2) ensure the profile exists (Local State + Login Data) by launching Chrome once
+if ((-not (Test-Path $localstate)) -and $chrome) {
+  Log "profile missing -> launching Chrome headless once to create it"
+  # No --user-data-dir: Chrome's default profile IS this path, which is what we seed.
+  Start-Process -FilePath $chrome -ArgumentList '--headless=new','--disable-gpu','--no-first-run','--no-default-browser-check','about:blank'
+  Start-Sleep -Seconds 12
+  Get-Process chrome -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+  Start-Sleep -Seconds 2
+}
+
+# 3) PRIMARY: DPAPI/AES-GCM injection into Login Data
+try {
+  $out = & $py (Join-Path $stage 'seed_chrome_cred.py') --url $url --realm $realm --username $user --password $pass 2>&1
+  $out | ForEach-Object { Log "injector: $_" }
+  Log "injector exit=$LASTEXITCODE"
+} catch {
+  Log "injector EXCEPTION: $_"
+}
+{% endif %}
+
+{% if charlie_chrome_credman %}
+# 4) FALLBACK A: Credential Manager entry in reuben's vault
+try {
+  cmdkey /generic:"{{ charlie_wiki_url }}" /user:"$user" /pass:"$pass" | Out-Null
+  Log "cmdkey generic credential added"
+} catch { Log "cmdkey error: $_" }
+{% endif %}
+
+{% if charlie_chrome_desktop_csv %}
+# 5) FALLBACK B: Chrome-importable CSV on the Desktop
+try {
+  $desktop = [Environment]::GetFolderPath('Desktop')
+  Copy-Item -Force (Join-Path $stage 'chrome-passwords.csv') (Join-Path $desktop 'chrome-passwords.csv')
+  Log "csv dropped to $desktop"
+} catch { Log "csv error: $_" }
+{% endif %}
+
+Log "=== seed_chrome_login done ==="

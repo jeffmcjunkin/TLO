@@ -1,0 +1,37 @@
+---
+# =============================================================================
+# charlie_chrome_creds defaults
+# =============================================================================
+# The account whose Chrome cred is seeded is reuben (the AREUBEN-WS autologon
+# user). The seeded login is the BookStack editor identity, which is an EMAIL
+# (BookStack authenticates by email), so charlie_wiki_editor_email is stored as
+# the Chrome "username".
+#
+# CRITICAL: charlie_wiki_editor_email / charlie_wiki_editor_password MUST MATCH
+# the editor account created by charlie_bookstack, or the dumped cred will not
+# log into the wiki. Defaults are identical in both roles.
+
+charlie_wiki_url: "http://wiki.charlie.local"
+charlie_wiki_login_url: "http://wiki.charlie.local/login"
+charlie_wiki_editor_email: "reuben@charlie.local"
+charlie_wiki_editor_password: "Reuben.Wiki.2025!"
+
+# reuben (AREUBEN-WS autologon user) -- whose vault we seed.
+charlie_chrome_reuben_user: reuben
+charlie_chrome_reuben_domain: charlie      # NetBIOS
+
+# staging dir for helper + fallback assets on the host
+charlie_chrome_stage_dir: 'C:\ludus\charlie_chrome'
+
+# --- PRIMARY: real DPAPI/AES-GCM injection into Login Data ------------------
+# Disables App-Bound Encryption so Chrome uses the classic DPAPI-wrapped AES key
+# (dumpable by SharpChrome), then a logon task (as reuben) injects a v10 row.
+charlie_chrome_use_dpapi_injection: true
+charlie_chrome_install_python: true        # install python + pycryptodome for the injector
+
+# --- FALLBACKS (always shipped; belt-and-suspenders) ------------------------
+charlie_chrome_credman: true               # cmdkey generic cred in reuben's vault
+charlie_chrome_desktop_csv: true           # Chrome-importable CSV on reuben's Desktop
+
+# scheduled task name
+charlie_chrome_task_name: "TLO-SeedChromeCred"
