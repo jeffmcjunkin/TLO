@@ -50,7 +50,8 @@
     bindings:
       add:
         - protocol: http
-          binding_information: "*:{{ oscar_web_port }}:"
+          ip: "*"
+          port: "{{ oscar_web_port }}"
 
 - name: Open the firewall for the training web port
   community.windows.win_firewall_rule:
