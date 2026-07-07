@@ -1,11 +1,8 @@
 ---
 # Runs on oscar-hardhat (Debian 12). Docker comes from the geerlingguy.docker dependency.
-# Clones the open-source HardHat C2 project and builds+starts it via docker compose, exposing
-# the teamserver (implant/API :5000) and Blazor client UI (:7096) to the range. Idempotent.
-#
-# NOTE: HardHat has no env-based admin seed; the first operator is created via the client UI.
-# The M6 RE artifact (oscar_re_service) decrypts to hardhat_admin_user/password — that operator
-# is registered in HardHat during range validation so the recovered creds log in.
+# Clones HardHat C2 and kicks off its docker build ONCE in the background (the .NET image
+# build is slow, ~20-40 min); the deploy never blocks on it. HardHat comes up when the build
+# finishes; validation verifies it (docker ps / curl :7096). Idempotent via a marker file.
 
 - name: Install git
   ansible.builtin.apt:
@@ -26,22 +23,11 @@
     src: docker-compose.yaml.j2
     dest: "{{ hardhat_dir }}/docker-compose.yaml"
 
-- name: Check whether the HardHat server container is already running
-  ansible.builtin.shell: docker ps --filter name=hardhat_server -q
-  register: _hh_ps
-  changed_when: false
-
-- name: Build + start HardHat C2 (fire-and-forget; the .NET image build is slow)
-  ansible.builtin.command:
-    cmd: "docker compose -f docker-compose.yaml up -d --build"
+- name: Build + start HardHat C2 in the background, once (slow .NET build; log /var/log/hardhat_build.log)
+  ansible.builtin.shell: |
+    nohup docker compose -f docker-compose.yaml up -d --build > /var/log/hardhat_build.log 2>&1 &
+    disown || true
+    touch {{ hardhat_dir }}/.tlo_build_started
+  args:
     chdir: "{{ hardhat_dir }}"
-  when: _hh_ps.stdout | trim | length == 0
-  async: 2400          # allow up to 40 min for the .NET image build
-  poll: 0              # do NOT block the deploy on the build
-  register: _hh_build
-
-- name: Note the HardHat teamserver port (non-blocking; the .NET build finishes async)
-  ansible.builtin.wait_for:
-    port: "{{ hardhat_teamserver_port }}"
-    timeout: 15
-  ignore_errors: true   # build may still be compiling; validation re-checks. Deploy must not block on it.
+    creates: "{{ hardhat_dir }}/.tlo_build_started"
