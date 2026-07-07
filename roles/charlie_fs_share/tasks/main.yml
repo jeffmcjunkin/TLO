@@ -90,9 +90,7 @@
     name: "{{ charlie_it_share_name }}"
     path: "{{ charlie_it_share_path }}"
     description: "IT installers & field-tech resources (anonymous)"
-    read:
-      - Everyone
-      - Guests
+    read: "Everyone,Guests"    # win_share read/change/full take a comma-separated STRING, not a list
     list: true      # allow the share to be enumerated in a null session
 
 # =============================================================================
@@ -113,8 +111,7 @@
     name: "{{ charlie_backups_share_name }}"
     path: "{{ charlie_backups_share_path }}"
     description: "Nightly config & credential backups"
-    read:
-      - "{{ charlie_netbios }}\\Domain Users"
+    read: "{{ charlie_netbios }}\\Domain Users"    # comma-separated STRING, not a list
     list: true
 
 # Null-session parameters (NullSessionShares / RestrictNullSessAccess / LSA
