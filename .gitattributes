@@ -1,0 +1,17 @@
+# Keep line endings deterministic so Ansible/shell run correctly on the Linux Ludus server.
+* text=auto eol=lf
+*.sh    text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.j2    text eol=lf
+*.sql   text eol=lf
+*.py    text eol=lf
+# PowerShell tolerates LF; keep LF for consistency across the repo.
+*.ps1   text eol=lf
+# Binary artifacts — never touch.
+*.pdf   binary
+*.png   binary
+*.kdbx  binary
+*.exe   binary
+*.dll   binary
+*.zip   binary
