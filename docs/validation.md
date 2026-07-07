@@ -13,7 +13,7 @@ IPs assume range number 3 (`10.3.<vlan>.<octet>`). Names resolve via the range r
 
 | Step | From | Command / action | Pass criteria |
 |---|---|---|---|
-| 1.1 | Kali | `nmap -sV -p- 10.3.20.10 10.3.20.20` | portal shows 80/443/1194; dns shows 53 |
+| 1.1 | Kali | `nmap -sV -p- 10.3.20.10 10.3.20.20` + `nmap -sU -p1194 10.3.20.10` | portal shows 80/443 (TCP) + 1194/udp (OpenVPN); dns shows 53 |
 | 1.2 | Kali | `curl -I http://10.3.20.10` | leaks `X-Powered-By: CorpVPN/...`, `X-Backend: vpn01...` |
 | 1.3 | Kali | browse portal, login `admin:admin` | dashboard loads, lists `.ovpn` |
 | 1.4 | Kali | download `client.ovpn` | valid inline-cert OpenVPN profile |
@@ -58,4 +58,26 @@ M6 RE→HardHat → M7 pivot→CI/CD creds → M8 poisoned pipeline→DA → M9 
 **Pass = every gate crossed using only artifacts earned in prior milestones** (no operator
 shortcuts, no direct network paths that bypass the VPN or HardHat gates).
 
-> Results are recorded here as the matrix is executed (✅/❌ + notes) during the validation phase.
+## End-to-end results
+
+A full operator run was executed from Kali via Mythic (Athena agent, http profile). Outcome:
+
+- **Both hard gates hold.** CHARLIE is reachable only through the VPN portal tunnel (which pushes
+  only `10.3.30.0/24`); ALPHA is reachable only by pivoting through the OSCAR HardHat host. The
+  inter-VLAN `REJECT` default enforces milestone order throughout.
+- **Every milestone's exploit primitive is genuinely present and exercisable** — M1 recon/`.ovpn`,
+  M2 anon SMB + AS-REP (`svc_helpdesk` → `Chelsea1998`), M3 DCOM foothold + Chrome-DPAPI cred theft,
+  M4 stored-XSS/NTLM-coercion + KeePass crack (`sunshine1`), M5 ViewState/SQLi/`xp_cmdshell` as
+  `svc_mssql` + constrained-delegation S4U + LAPS read, M6 service RE + SYSTEM-only KeyBlob → HardHat
+  login, M7 HardHat pivot + git-history/PSReadline/CI loot, M8 DA build-agent + staged poison, M9
+  layered SQLi extracting `dbo.CustomerSecrets`.
+
+The first full run found four chain-breaks and several residual range-isms; all were fixed and
+re-verified (see the fix commit): M3.1 helpdesk accounts made local admins on AREUBEN-WS; M3.2 Chrome
+DPAPI injection made reliable (no CSV/plaintext leftover); M4.2 victim browser + a publicly-viewable
+runbook + a `wiki.charlie.local` A record; M4.3 firewall opened CHARLIE→relay; M6.3 HardHat admin
+password pinned to the reverse-engineered value. With those in place the chain connects **gate-to-gate
+using only artifacts earned in prior milestones**.
+
+> Tooling note: on Kali, `keepass2john` cannot parse KDBX4; use an up-to-date build or crack the DB
+> with `hashcat -m 13400` directly. `svc_helpdesk`'s hash needs a capitalization rule (`Chelsea1998`).
