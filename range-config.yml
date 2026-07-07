@@ -309,6 +309,7 @@ ludus:
     role_vars:
       gitlab_domain: gitlab.alpha.local
       gitlab_external_url: "http://gitlab.alpha.local/"
+      gitlab_download_validate_certs: false   # isolated lab: skip cert verify on the GitLab repo-script download
 
   - vm_name: "{{ range_id }}-alpha-xy1"
     hostname: "XY1-ALPHA"
