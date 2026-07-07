@@ -12,6 +12,7 @@ LUDUS="${LUDUS:-ludus}"
 
 echo "==> Collections"
 $LUDUS ansible collection add badsectorlabs.ludus_windows_utils || true   # LAPS / AD ACL helpers
+$LUDUS ansible collection add microsoft.iis || true                       # IIS modules (oscar_vulnweb)
 
 echo "==> Off-the-shelf Galaxy roles"
 for r in geerlingguy.docker geerlingguy.pip gantsign.golang geerlingguy.gitlab e1a.ludus_windows_smb_share; do
