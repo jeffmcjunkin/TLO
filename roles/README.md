@@ -10,7 +10,7 @@ Ludus user-defined roles — installed with `ludus ansible role add -d roles/<na
 |---|---|---|---|
 | `tlo_attacker_tools` | Kali | all | Pins offensive tooling (nmap, impacket, netexec, responder/ntlmrelayx, ligolo/chisel, openvpn, keepass2john, ysoserial.net, Rubeus, GodPotato) |
 | `tlo_vpn_portal` | vpn-portal | 1 | OpenVPN server + weak web dashboard (default creds) serving `.ovpn`; NATs dialed-in clients into CHARLIE (the M1 gate) |
-| `tlo_external_dns` | ext-dns | 1 | bind9 authoritative `tlo-corp.com` with an intentional AXFR leak |
+| `tlo_external_dns` | ext-dns | 1 | bind9 authoritative `meridianfreight.com` with an intentional AXFR leak |
 | `charlie_ad_vulns` | CHARLIE-DC1 | 2 | Owns charlie.local accounts; sets `DoNotRequirePreAuth` (AS-REP) + rockyou-weak password |
 | `charlie_fs_share` | CHARLIE-FS | 2/4 | SMB shares (anon `IT$` + `Backups`); plants VPN notes + a dict-crackable `passwords.kdbx` |
 | `charlie_bookstack` | charlie-wiki | 4 | BookStack wiki with content-scripts enabled (stored XSS); seeds the victim page |

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# TLO patch for HardHatC2 V0.3.03-Alpha teamserver compile break.
+# Patch for HardHatC2 V0.3.03-Alpha teamserver compile break.
 #
 # In this tag, PluginService.GetImpPostProcPlugin() and the pre-proc plugin's
 # .Value return the plugin *interfaces* (IExtImplant_TaskPostProcess /

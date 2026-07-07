@@ -1,6 +1,6 @@
 ; {{ ansible_managed }}
-; TLO External DNS — authoritative zone for {{ dns_zone }}
-; <R> = {{ tlo_range_octet }} ; this host (ns1) = {{ tlo_dns_ip }}
+; Authoritative zone for {{ dns_zone }}
+; ns1 = {{ tlo_dns_ip }}
 $TTL {{ dns_ttl }}
 @       IN      SOA     {{ dns_ns_name }}.{{ dns_zone }}. {{ dns_hostmaster }} (
                         {{ dns_soa_serial }}    ; Serial
@@ -18,9 +18,6 @@ $TTL {{ dns_ttl }}
 @                       IN      TXT     "v=spf1 mx a:mail.{{ dns_zone }} -all"
 
 ; --- Host records ---
-; NOTE: entries into 10.{{ tlo_range_octet }}.30.x are INTERNAL CHARLIE hosts that
-; should never be published externally — exposed here on purpose so the open
-; AXFR leaks the internal footprint (M1 recon breadcrumb).
 {% for rec in tlo_dns_a_records %}
 {{ "%-23s"|format(rec.name) }} IN      A       10.{{ tlo_range_octet }}.{{ rec.octets }}      ; {{ rec.comment }}
 {% endfor %}

@@ -110,7 +110,7 @@
   environment:
     EASYRSA_BATCH: "1"
     EASYRSA_PKI: "{{ easyrsa_pki }}"
-    EASYRSA_REQ_CN: "TLO-CorpVPN-CA"
+    EASYRSA_REQ_CN: "MeridianFreight-CorpVPN-CA"
     EASYRSA_KEY_SIZE: "{{ vpn_key_size }}"
 
 - name: Build the server certificate
@@ -290,7 +290,7 @@
       openssl req -x509 -newkey rsa:2048 -nodes
       -keyout /etc/ssl/private/corpvpn.key
       -out /etc/ssl/certs/corpvpn.crt
-      -days 3650 -subj "/O=TLO Corp/OU=IT/CN=vpn.tlo-corp.com"
+      -days 3650 -subj "/O=MeridianFreight/OU=IT/CN=vpn.meridianfreight.com"
     creates: /etc/ssl/certs/corpvpn.crt
 
 - name: Create the htpasswd file with the default portal creds

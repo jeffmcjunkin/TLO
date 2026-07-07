@@ -22,10 +22,10 @@ vpn_server_network: "172.16.20.0"
 vpn_server_netmask: "255.255.255.0"
 vpn_server_cidr: "172.16.20.0/24"
 vpn_client_name: client1
-# What the .ovpn connects back to. Ludus `dns_rewrites` publishes
-# vpn.tlo-corp.com -> this VM range-wide, so the FQDN resolves from Kali; the
+# What the .ovpn connects back to. Corporate DNS publishes
+# vpn.meridianfreight.com -> this VM, so the FQDN resolves for clients; the
 # portal's own IP is filled in at runtime as a comment fallback in the profile.
-vpn_remote_host: "vpn.tlo-corp.com"
+vpn_remote_host: "vpn.meridianfreight.com"
 # Optional DNS to push to VPN clients (empty = don't push). Set to the ext-dns
 # host (10.<R>.20.20) if you want pushed resolution.
 vpn_push_dns: ""
@@ -41,10 +41,10 @@ ovpn_client_out: /root/client.ovpn        # operator convenience copy
 
 # ---- Weak web dashboard (nginx) ----------------------------------------------
 web_root: /var/www/corpvpn
-portal_server_name: "vpn.tlo-corp.com vpn01.tlo-corp.local _"
+portal_server_name: "vpn.meridianfreight.com vpn01.meridianfreight.local _"
 # Intentional information-leak headers (recon breadcrumbs for M1.2 `curl -I`).
 portal_header_powered_by: "CorpVPN/1.2.3 (Debian)"
-portal_header_backend: "vpn01.tlo-corp.local"
+portal_header_backend: "vpn01.meridianfreight.local"
 
 # ---- Packages ----------------------------------------------------------------
 tlo_vpn_packages:

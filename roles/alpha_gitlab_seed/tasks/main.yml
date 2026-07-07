@@ -32,18 +32,18 @@
 - name: Template the gitlab-rails seed script (root pw + deterministic PAT)
   ansible.builtin.template:
     src: seed_root_and_token.rb.j2
-    dest: /tmp/tlo_seed_root_and_token.rb
+    dest: /tmp/seed_root_and_token.rb
     owner: root
     mode: "0644"          # gitlab-rails runner executes as the git user, which must be able to read the file
 
 - name: Run gitlab-rails seed (root pw + deterministic PAT)
-  ansible.builtin.command: gitlab-rails runner /tmp/tlo_seed_root_and_token.rb
+  ansible.builtin.command: gitlab-rails runner /tmp/seed_root_and_token.rb
   register: gl_seed
   changed_when: "'CHANGED' in gl_seed.stdout"
 
 - name: Remove the seed script (contains the token)
   ansible.builtin.file:
-    path: /tmp/tlo_seed_root_and_token.rb
+    path: /tmp/seed_root_and_token.rb
     state: absent
 
 # ---- group + project via REST API using the deterministic PAT (robust path) ----
@@ -106,17 +106,17 @@
     - name: Template the offline git-history builder
       ansible.builtin.template:
         src: build_history.sh.j2
-        dest: /tmp/tlo_build_history.sh
+        dest: /tmp/build_history.sh
         mode: "0700"
 
     - name: Build + push the crafted git history (M7.3 — survives in git log -p)
-      ansible.builtin.command: /tmp/tlo_build_history.sh
+      ansible.builtin.command: /tmp/build_history.sh
       register: gl_hist
       changed_when: true
 
     - name: Remove the history builder (contains the secrets)
       ansible.builtin.file:
-        path: /tmp/tlo_build_history.sh
+        path: /tmp/build_history.sh
         state: absent
 
     # ---- masked CI/CD variables (M7.5) ----

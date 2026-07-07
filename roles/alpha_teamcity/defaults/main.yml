@@ -26,6 +26,18 @@ alpha_teamcity_agent_service: "TCBuildAgent"
 alpha_teamcity_agent_user: 'alpha\svc_build'
 alpha_teamcity_agent_password: "Bu1ld.Agent.2025!"   # SHARED with alpha_ad_content
 alpha_teamcity_agent_serverurl: "http://localhost:8111"
+alpha_teamcity_agent_name: "ALPHA-BUILD-01"
+
+# ---- Server service logon (a local admin account; the CI server needs no domain rights) ----
+alpha_teamcity_server_svc_user: "localuser"
+alpha_teamcity_server_svc_password: "password"
+
+# ---- TeamCity system administrator (created over the super-user token on first run) ----
+alpha_teamcity_admin_user: "admin"
+alpha_teamcity_admin_password: "Alpha#CI#Adm1n2026"
+
+# ---- Build project id (REST id; the human-facing name is also this) ----
+alpha_teamcity_project_id: "PaymentService"
 
 # ---- Supply-chain build project (shipped in files/PaymentService) ----
 alpha_teamcity_project_dest: 'C:\Projects\payment-service'

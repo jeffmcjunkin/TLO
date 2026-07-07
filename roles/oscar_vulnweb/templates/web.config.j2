@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- CorpShop training app — intentionally insecure configuration (isolated lab only). -->
+<!-- CorpShop web application configuration. -->
 <configuration>
   <connectionStrings>
     <add name="AppDb"
@@ -9,8 +9,6 @@
   <system.web>
     <compilation debug="true" targetFramework="4.5" />
     <httpRuntime targetFramework="4.5" />
-    <!-- Deliberately static machineKey (Milestone 5.1 ViewState practice). No per-session
-         ViewStateUserKey, so a holder of this key can forge __VIEWSTATE. -->
     <machineKey validation="SHA1" decryption="AES"
                 validationKey="{{ oscar_web_validation_key }}"
                 decryptionKey="{{ oscar_web_decryption_key }}" />

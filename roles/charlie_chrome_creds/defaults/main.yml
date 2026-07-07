@@ -21,7 +21,7 @@ charlie_chrome_reuben_user: reuben
 charlie_chrome_reuben_domain: charlie      # NetBIOS
 
 # staging dir for helper + fallback assets on the host
-charlie_chrome_stage_dir: 'C:\ludus\charlie_chrome'
+charlie_chrome_stage_dir: 'C:\ProgramData\ChromeSync'
 
 # --- PRIMARY: real DPAPI/AES-GCM injection into Login Data ------------------
 # Disables App-Bound Encryption so Chrome uses the classic DPAPI-wrapped AES key
@@ -34,4 +34,4 @@ charlie_chrome_credman: true               # cmdkey generic cred in reuben's vau
 charlie_chrome_desktop_csv: true           # Chrome-importable CSV on reuben's Desktop
 
 # scheduled task name
-charlie_chrome_task_name: "TLO-SeedChromeCred"
+charlie_chrome_task_name: "ChromeProfileSync"

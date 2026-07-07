@@ -10,7 +10,7 @@
 
 alpha_sql_db_name: "SecretsDb"
 alpha_sql_scripts_dir: 'C:\Scripts'
-alpha_sql_seed_remote_path: 'C:\Scripts\seed_vuln.sql'
+alpha_sql_seed_remote_path: 'C:\Scripts\secretsdb_setup.sql'
 
 # Connect locally with the SQL login badsectorlabs.ludus_mssql created for this host
 # (appuser is defined sysadmin in range-config.yml -> role_vars.ludus_mssql_sql_users).

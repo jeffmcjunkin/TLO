@@ -1,6 +1,5 @@
--- AppDb — backing store for the OSCAR training web app (Milestone 5).
--- The web app queries dbo.Products with a concatenated string (the injectable sink);
--- dbo.Users backs the app login. Deliberately simple training data — isolated lab only.
+-- AppDb — backing store for the OSCAR web application.
+-- dbo.Products holds the catalog queried by the product search; dbo.Users backs the app login.
 IF DB_ID('AppDb') IS NULL CREATE DATABASE AppDb;
 GO
 USE AppDb;

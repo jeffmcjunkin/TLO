@@ -8,8 +8,6 @@
         if (Session["auth"] == null) { Response.Redirect("Default.aspx"); }
     }
 
-    // DELIBERATELY VULNERABLE (training, Milestone 5.2): the search term is concatenated
-    // straight into the SQL text -> classic SQL injection sink. Do not copy into real apps.
     protected void DoSearch(object sender, EventArgs e)
     {
         string q = txtQ.Text;
@@ -21,7 +19,7 @@
             var da = new SqlDataAdapter(sql, con);
             var dt = new DataTable();
             try { da.Fill(dt); grid.DataSource = dt; grid.DataBind(); }
-            catch (System.Exception ex) { lblErr.Text = ex.Message; }  // verbose errors on purpose
+            catch (System.Exception ex) { lblErr.Text = ex.Message; }
         }
     }
 </script>

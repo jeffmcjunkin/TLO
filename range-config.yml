@@ -63,7 +63,7 @@ ludus:
     cpus: 2
     linux: true
     dns_rewrites:
-      - vpn.tlo-corp.com
+      - vpn.meridianfreight.com
     roles:
       - tlo_vpn_portal              # CUSTOM: OpenVPN + weak web dashboard (default creds) + .ovpn + NAT into CHARLIE
 
@@ -76,7 +76,7 @@ ludus:
     cpus: 1
     linux: true
     roles:
-      - tlo_external_dns            # CUSTOM: bind9 authoritative tlo-corp.com + AXFR leak
+      - tlo_external_dns            # CUSTOM: bind9 authoritative meridianfreight.com + AXFR leak
 
   # ===================== CHARLIE  charlie.local (VLAN 30) =====================
   - vm_name: "{{ range_id }}-charlie-dc1"

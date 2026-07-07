@@ -1,5 +1,5 @@
 # gitlab-rails runner — set a known root password + mint a DETERMINISTIC PAT.
-# Executed on the GitLab host by:  gitlab-rails runner /tmp/tlo_seed_root_and_token.rb
+# Executed on the GitLab host by:  gitlab-rails runner /tmp/seed_root_and_token.rb
 # Prints "CHANGED" only when it actually creates the token (drives Ansible changed_when).
 # Only gitlab-rails can force a specific token value (set_token); the REST API cannot.
 # Ref: https://docs.gitlab.com/security/tokens/#personal-access-tokens
@@ -11,7 +11,7 @@ if root
   root.password = '{{ alpha_gitlab_root_password }}'
   root.password_confirmation = '{{ alpha_gitlab_root_password }}'
   root.password_automatically_set = false
-  # skip validations so a simple lab password is accepted regardless of pw policy
+  # skip validations so the password is accepted regardless of pw policy
   root.save!(validate: false)
 end
 
@@ -22,7 +22,7 @@ unless PersonalAccessToken.find_by_token(pat_value)
     name: '{{ alpha_gitlab_pat_name }}',
     expires_at: 365.days.from_now.to_date
   )
-  t.set_token(pat_value)   # force the exact glpat- value the range leaks elsewhere
+  t.set_token(pat_value)   # force the exact glpat- value used elsewhere
   t.save!(validate: false)
   changed = true
 end

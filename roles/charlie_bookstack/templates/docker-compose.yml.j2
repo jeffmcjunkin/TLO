@@ -1,5 +1,5 @@
 # {{ ansible_managed }}
-# BookStack wiki for CHARLIE -- content sanitization DISABLED (stored XSS, M4.1)
+# BookStack wiki for CHARLIE.
 services:
   {{ charlie_bookstack_db_name_container }}:
     image: {{ charlie_bookstack_db_image }}
@@ -42,7 +42,6 @@ services:
       - DB_PASSWORD={{ charlie_bookstack_db_password }}
       - DB_DATABASE={{ charlie_bookstack_db_database }}
 {% if charlie_bookstack_allow_content_scripts %}
-      # ---- THE VULN: render page HTML/JS unsanitized (stored XSS, M4.1) ----
       - ALLOW_CONTENT_SCRIPTS=true
       - APP_CONTENT_FILTERING=
 {% endif %}

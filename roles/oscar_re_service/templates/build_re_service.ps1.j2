@@ -1,7 +1,7 @@
-# Builds + installs the OscarC2Agent reverse-engineering training service (benign crackme).
+# Builds + installs the OscarC2Agent service.
 # Derives the AES key deterministically, encrypts the C2 credential string at build time so the
 # decrypt is reproducible, compiles a small .NET service, and stores the key under a SYSTEM-only
-# registry DACL so a local admin must reach SYSTEM (SeImpersonate) to read it. Isolated lab only.
+# registry DACL so a local admin must reach SYSTEM (SeImpersonate) to read it.
 $ErrorActionPreference = 'Stop'
 $seed       = "{{ oscar_re_key_seed }}"
 $plain      = "{{ oscar_c2_admin_user }}:{{ oscar_c2_admin_password }}"
@@ -9,7 +9,7 @@ $installDir = "{{ oscar_re_install_dir }}"
 $svc        = "{{ oscar_re_service_name }}"
 $exe        = Join-Path $installDir "$svc.exe"
 
-# Idempotency: if already installed, do nothing (the DACL is intentionally not admin-writable).
+# Idempotency: if already installed, do nothing (the key DACL is SYSTEM-only by design).
 if ((Get-Service -Name $svc -ErrorAction SilentlyContinue) -and (Test-Path $exe)) {
     Write-Output "already installed"; exit 0
 }

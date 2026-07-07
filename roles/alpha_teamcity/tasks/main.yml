@@ -1,17 +1,15 @@
 ---
 # =====================================================================
-# alpha_teamcity — install TeamCity server + agent, wire agent-as-DA, ship the
-# supply-chain C# project + poison patch (M7.5 / M8.1).
+# alpha_teamcity — install TeamCity server + a Domain-Admin build agent, ship the
+# supply-chain C# project + deploy-hook patch.
 #
-# HONEST FLAG (unattended install fragility): JetBrains does not document a rich
-# silent-config surface for the TeamCity NSIS installer. `/S` performs a silent
-# install of BOTH the server and a build agent as Windows services with defaults
-# (server on :8111, agent service "TCBuildAgent"). We then reconfigure the agent
-# service to log on as svc_build. If JetBrains changes the installer, the /S step
-# and/or the service names below may need adjustment.
+# The NSIS /S silent install only EXTRACTS TeamCity — it does not create conf/server.xml,
+# register the Windows services, or complete the first-run wizard. setup_teamcity.ps1 and
+# setup_agent.ps1 do all of that unattended (service install via TeamCityService.exe, the
+# /mnt maintenance wizard, EULA, super-user-token REST). Both scripts are idempotent.
 # =====================================================================
 
-# ---- 1. download + silent install ----
+# ---- 1. download + extract (silent) ----
 - name: Download the TeamCity Windows installer
   ansible.windows.win_get_url:
     url: "{{ alpha_teamcity_installer_url }}"
@@ -22,30 +20,32 @@
   delay: 15
   until: tc_dl is succeeded
 
-- name: Check whether the TeamCity server service already exists (idempotency)
-  ansible.windows.win_service_info:
-    name: "{{ alpha_teamcity_server_service }}"
-  register: tc_srv_info
+- name: Check whether TeamCity is already extracted (idempotency)
+  ansible.windows.win_stat:
+    path: "{{ alpha_teamcity_install_dir }}\\bin\\TeamCityService.exe"
+  register: tc_extracted
 
-# NSIS: /S = silent, /D=<dir> MUST be last and unquoted. Installs server + agent
-# as services and starts them. Server data dir defaults under ProgramData.
-- name: Silent-install TeamCity server + build agent
+# NSIS: /S = silent, /D=<dir> MUST be last and unquoted. Extracts to InstallDir.
+- name: Silent-extract TeamCity
   ansible.windows.win_command: >-
     {{ alpha_teamcity_download_path }} /S /D={{ alpha_teamcity_install_dir }}
-  when: not (tc_srv_info.exists | default(false))
+  when: not tc_extracted.stat.exists
   register: tc_install
 
-- name: Wait for the TeamCity server to answer on :{{ alpha_teamcity_port }}
-  ansible.windows.win_uri:
-    url: "http://localhost:{{ alpha_teamcity_port }}/login.html"
-    status_code: [200, 401, 302]
-    method: GET
-  register: tc_up
-  retries: 60
+- name: Wait for extraction to finish (TeamCityService.exe present)
+  ansible.windows.win_stat:
+    path: "{{ alpha_teamcity_install_dir }}\\bin\\TeamCityService.exe"
+  register: tc_bin
+  retries: 30
   delay: 10
-  until: tc_up.status is defined and tc_up.status in [200, 401, 302]
+  until: tc_bin.stat.exists
 
-# ---- 2. firewall ----
+# ---- 2. server config: plain-HTTP server.xml (the /S install does not create it) ----
+- name: Install the plain-HTTP server.xml (:{{ alpha_teamcity_port }})
+  ansible.windows.win_copy:
+    src: server.xml
+    dest: "{{ alpha_teamcity_install_dir }}\\conf\\server.xml"
+
 - name: Allow inbound TeamCity :{{ alpha_teamcity_port }}
   community.windows.win_firewall_rule:
     name: "TeamCity {{ alpha_teamcity_port }}"
@@ -56,39 +56,13 @@
     enabled: true
     state: present
 
-# ---- 3. build agent runs as alpha\svc_build (Domain Admin) ----
-- name: Grant svc_build the "Log on as a service" right
-  ansible.windows.win_user_right:
-    name: SeServiceLogonRight
-    users:
-      - "{{ alpha_teamcity_agent_user }}"
-    action: add
-
-- name: Point the build agent at the local server
-  community.windows.win_lineinfile:
-    path: "{{ alpha_teamcity_install_dir }}\\buildAgent\\conf\\buildAgent.properties"
-    regexp: '^serverUrl='
-    line: "serverUrl={{ alpha_teamcity_agent_serverurl }}"
-  # buildAgent.properties may not exist until first agent start; ignore if absent.
-  ignore_errors: true
-
-- name: Reconfigure the build agent service to log on as svc_build (Domain Admin)
-  ansible.windows.win_service:
-    name: "{{ alpha_teamcity_agent_service }}"
-    username: "{{ alpha_teamcity_agent_user }}"
-    password: "{{ alpha_teamcity_agent_password }}"
-    start_mode: auto
-    state: restarted
-  # If the agent service name differs on a newer installer, flag and adjust.
-  ignore_errors: true
-
-# ---- 4. ship the supply-chain C# project + poison patch to disk ----
+# ---- 3. ship the supply-chain C# project + deploy-hook patch to disk ----
 - name: Ensure the project directory exists
   ansible.windows.win_file:
     path: "{{ alpha_teamcity_project_dest }}"
     state: directory
 
-- name: Copy the buildable C# project (clean HEAD state) to XY1-ALPHA
+- name: Copy the buildable C# project (clean state) to XY1-ALPHA
   ansible.windows.win_copy:
     src: PaymentService/
     dest: "{{ alpha_teamcity_project_dest }}\\"
@@ -98,14 +72,53 @@
     src: build.cmd
     dest: "{{ alpha_teamcity_project_dest }}\\build.cmd"
 
-# The poison patch is shipped but NOT applied — it is the artifact the attacker
-# commits/applies during M8.1. Applying + building it as svc_build == Domain Admin.
-- name: Stage the M8.1 poison patch (NOT applied; the attacker applies it)
+# Shipped but NOT applied — the artifact the attacker commits/applies during M8.1.
+# Applying + building it under the DA build agent == Domain Admin.
+- name: Stage the deploy-hook patch (NOT applied; the attacker applies it)
   ansible.windows.win_copy:
-    src: poison/
-    dest: "{{ alpha_teamcity_project_dest }}\\poison\\"
+    src: deploy/
+    dest: "{{ alpha_teamcity_project_dest }}\\deploy\\"
 
-# ---- 5. optional: create the TeamCity project + build config over REST ----
-- name: Create the TeamCity project + build config (best-effort)
-  ansible.builtin.include_tasks: create_build_config.yml
-  when: alpha_teamcity_create_build_config | bool
+# ---- 4. bring up the server (service install + first-run wizard + admin + build config) ----
+- name: Copy the server setup script
+  ansible.windows.win_copy:
+    src: setup_teamcity.ps1
+    dest: "{{ alpha_teamcity_install_dir }}\\setup_teamcity.ps1"
+
+- name: Run the server setup (service, wizard, EULA, admin, project + build config)
+  ansible.windows.win_shell: >-
+    & '{{ alpha_teamcity_install_dir }}\setup_teamcity.ps1'
+    -InstallDir '{{ alpha_teamcity_install_dir }}'
+    -Port {{ alpha_teamcity_port }}
+    -SvcUser '{{ alpha_teamcity_server_svc_user }}'
+    -SvcPass '{{ alpha_teamcity_server_svc_password }}'
+    -AdminUser '{{ alpha_teamcity_admin_user }}'
+    -AdminPass '{{ alpha_teamcity_admin_password }}'
+    -ProjectName '{{ alpha_teamcity_project_id }}'
+    -BuildCmd '{{ alpha_teamcity_project_dest }}\build.cmd'
+  register: tc_setup
+  changed_when: "'server setup complete' in tc_setup.stdout"
+
+# ---- 5. build agent runs as the DA service account ----
+- name: Grant the build service account "Log on as a service"
+  ansible.windows.win_user_right:
+    name: SeServiceLogonRight
+    users:
+      - "{{ alpha_teamcity_agent_user }}"
+    action: add
+
+- name: Copy the agent setup script
+  ansible.windows.win_copy:
+    src: setup_agent.ps1
+    dest: "{{ alpha_teamcity_install_dir }}\\setup_agent.ps1"
+
+- name: Run the agent setup (scheduled task as the DA account + authorize)
+  ansible.windows.win_shell: >-
+    & '{{ alpha_teamcity_install_dir }}\setup_agent.ps1'
+    -InstallDir '{{ alpha_teamcity_install_dir }}'
+    -Port {{ alpha_teamcity_port }}
+    -AgentName '{{ alpha_teamcity_agent_name }}'
+    -AgentUser '{{ alpha_teamcity_agent_user }}'
+    -AgentPass '{{ alpha_teamcity_agent_password }}'
+  register: tc_agent
+  changed_when: false

@@ -1,7 +1,7 @@
 # {{ ansible_managed }}
-# TLO override of HardHat C2's compose: expose the teamserver (implant/API) and the
-# Blazor client UI on all interfaces so the range (Kali operator, ALPHA implants) can
-# reach them. Builds from the repo's own Dockerfiles. Pinned ref: {{ hardhat_version }}.
+# HardHat C2 compose override: expose the teamserver (API) and the Blazor client
+# UI on all interfaces so remote clients can reach them. Builds from the repo's
+# own Dockerfiles. Pinned ref: {{ hardhat_version }}.
 version: "3"
 services:
   hardhat-server:

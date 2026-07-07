@@ -186,20 +186,20 @@
 - name: Victim browser -- stage the browse script
   when: charlie_enable_victim_browser | bool
   ansible.windows.win_template:
-    src: victim_browse.cmd.j2
-    dest: 'C:\Windows\Temp\victim_browse.cmd'
+    src: vpn_runbook_check.cmd.j2
+    dest: 'C:\Windows\Temp\vpn_runbook_check.cmd'
 
 - name: Victim browser -- scheduled task browses the wiki as the victim (every 3 min)
   when: charlie_enable_victim_browser | bool
   community.windows.win_scheduled_task:
-    name: TLO-VictimBrowse
+    name: IT-VPNRunbookCheck
     description: "IT helpdesk VPN runbook check"
     username: "{{ charlie_netbios }}\\{{ charlie_victim_user }}"
     password: "{{ charlie_victim_password }}"
     logon_type: interactive_token
     actions:
       - path: cmd.exe
-        arguments: '/c C:\Windows\Temp\victim_browse.cmd'
+        arguments: '/c C:\Windows\Temp\vpn_runbook_check.cmd'
     triggers:
       - type: logon
       - type: daily

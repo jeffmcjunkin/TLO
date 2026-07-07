@@ -1,13 +1,9 @@
 #!/usr/bin/env python3
 # =============================================================================
-# seed_chrome_cred.py  --  inject a saved login into Chrome's "Login Data"
+# seed_chrome_cred.py  --  write a saved login into Chrome's "Login Data"
 # =============================================================================
-# Range:  The Last Ones (TLO)  --  Milestone 3.2 ("Chrome creds")
-# Role:   charlie_chrome_creds  (AREUBEN-WS)
-#
-# Must run AS the target user (charlie\reuben) so DPAPI can decrypt the profile
-# AES key. Writes a real, dumpable v10 credential -- SharpChrome / any offline
-# Chromium password dumper recovers it after AREUBEN-WS is compromised.
+# Must run as the user whose profile is being updated (charlie\reuben) so DPAPI
+# can decrypt the profile AES key. Writes a standard v10 credential entry.
 #
 # How Chrome stores passwords (with App-Bound Encryption DISABLED, which this
 # role sets via ApplicationBoundEncryptionEnabled=0):

@@ -11,9 +11,9 @@
     path: "{{ alpha_sql_scripts_dir }}"
     state: directory
 
-- name: Copy seed_vuln.sql to ALPHA-SECRETS
+- name: Copy secretsdb_setup.sql to ALPHA-SECRETS
   ansible.windows.win_copy:
-    src: seed_vuln.sql
+    src: secretsdb_setup.sql
     dest: "{{ alpha_sql_seed_remote_path }}"
 
 # -b makes sqlcmd return a non-zero exit on a real SQL error so Ansible fails loudly.

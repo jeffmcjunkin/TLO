@@ -1,46 +1,28 @@
 #!/usr/bin/env python3
 # =============================================================================
-# make_keepass.py  --  build the planted \\FS\Backups\passwords.kdbx for CHARLIE
+# make_keepass.py  --  build \\FS\Backups\passwords.kdbx for CHARLIE
 # =============================================================================
-# Range:   The Last Ones (TLO)  --  Milestone 4.4 ("database decrypt")
-# Role:    charlie_fs_share  (runs on CHARLIE-FS)
-# Author:  TLO range authoring
+# Produces a standard KeePass 2 database (.kdbx) holding shared service logins.
 #
-# WHAT THIS PRODUCES
-# ------------------
-# A *real* KeePass 2 database (.kdbx) that is deliberately crackable so the
-# operator can reproduce the documented crack path:
-#
-#     keepass2john passwords.kdbx > kdbx.hash
-#     hashcat -m 13400 kdbx.hash /usr/share/wordlists/rockyou.txt
-#     # (master password below is a bare rockyou word+digit -> no rules needed)
-#
-# CRITICAL FORMAT DETAIL (why this script is not just `create_database`)
-# ---------------------------------------------------------------------
-# pykeepass' create_database() emits KDBX 4.0 with the **Argon2** KDF.
-# hashcat -m 13400 and keepass2john support KeePass 2 with the **AES-KDF**
-# only -- Argon2 KDBX4 is NOT supported by mode 13400. So after creating the
-# DB we rewrite the KDF VariantDictionary in the (RawCopy-wrapped) outer
-# header from Argon2 -> AES-KDF, and we MUST invalidate the cached raw header
-# bytes (header.data/offset1/offset2/length) or construct's RawCopy will write
-# the stale Argon2 header while the payload is encrypted with the AES-KDF key,
-# producing an unopenable file. The result is a standard KDBX4 + AES-KDF DB
-# that opens in KeePassXC and cracks with `hashcat -m 13400`.
+# FORMAT DETAIL (why this script is not just `create_database`)
+# ------------------------------------------------------------
+# pykeepass' create_database() emits KDBX 4.0 with the **Argon2** KDF. For
+# compatibility with our password-recovery tooling we use the **AES-KDF**
+# instead, so after creating the DB we rewrite the KDF VariantDictionary in the
+# (RawCopy-wrapped) outer header from Argon2 -> AES-KDF, and we MUST invalidate
+# the cached raw header bytes (header.data/offset1/offset2/length) or construct's
+# RawCopy will write the stale Argon2 header while the payload is encrypted with
+# the AES-KDF key, producing an unopenable file. The result is a standard KDBX4
+# + AES-KDF DB that opens in KeePassXC.
 #
 # MASTER PASSWORD
 # ---------------
-# Default: "sunshine1" -- a bare word+digit present verbatim in rockyou.txt, so
-# no hashcat rules are required. KeePass master passwords have no AD-style
-# complexity requirement, which is why we can use a pure lowercase+digit value.
-# Guaranteed-present fallbacks if your rockyou build lacks it: "sunshine",
-# "iloveyou", "password", "letmein". Override with --master.
+# Default: "sunshine1". Override with --master.
 #
-# ENTRIES (OSCAR pivot creds -- Milestone 4.4 -> 5)
-# -------------------------------------------------
-# The entries below intentionally reuse the REAL OSCAR secrets from
-# range-config.yml (oscar-db ludus_mssql_sql_users appsvc/AppSvc_P@ss1 and
-# sa/S3rver_S@_OSCAR!) so the recovered creds actually work when the operator
-# pivots CHARLIE -> OSCAR. If the architect changes OSCAR secrets, regenerate:
+# ENTRIES
+# -------
+# The entries below hold the OSCAR application/database service logins so they
+# match the accounts on those hosts. Regenerate after any change:
 #     python3 make_keepass.py --out passwords.kdbx
 #
 # DEPENDENCIES:  pip install pykeepass  (pulls construct, pycryptodome, argon2)
@@ -64,7 +46,7 @@ DEFAULT_ENTRIES = [
         "App_Adm1n_OSCAR!",
         "http://web.oscar.local/admin",
         "OSCAR corporate web app admin login. Reachable from the CHARLIE "
-        "foothold (M4/M5). Start here for the ViewState/SQLi chain.",
+        "network.",
     ),
     (
         "db.oscar - MSSQL appsvc (sysadmin)",
@@ -72,7 +54,7 @@ DEFAULT_ENTRIES = [
         "AppSvc_P@ss1",
         "mssql://db.oscar.local:1433",
         "Application SQL login on db.oscar (sysadmin). Mixed-mode auth, TCP "
-        "1433 open. Matches oscar-db ludus_mssql_sql_users in range-config.",
+        "1433 open.",
     ),
     (
         "db.oscar - MSSQL sa",
@@ -112,7 +94,7 @@ def build(out_path, master, rounds, entries):
         create_database(tmp, password=master)          # KDBX4 + Argon2
         kp = PyKeePass(tmp, password=master)
         force_aes_kdf(kp, rounds)                       # -> KDBX4 + AES-KDF
-        grp = kp.add_group(kp.root_group, "OSCAR pivot")
+        grp = kp.add_group(kp.root_group, "OSCAR services")
         for title, user, pw, url, notes in entries:
             kp.add_entry(grp, title=title, username=user, password=pw,
                          url=url, notes=notes)

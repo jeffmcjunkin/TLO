@@ -1,6 +1,5 @@
 @echo off
 REM Locate MSBuild.exe via vswhere (present on VS2022 hosts) and build the project.
-REM Works for both the clean and the poisoned PaymentService.csproj.
 setlocal
 set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
 if not exist "%VSWHERE%" (

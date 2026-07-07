@@ -2,7 +2,7 @@
 <%@ Import Namespace="System.Data.SqlClient" %>
 <%@ Import Namespace="System.Configuration" %>
 <script runat="server">
-    // CorpShop login. Parameterized on purpose — the injectable sink lives on Search.aspx.
+    // CorpShop login. Uses parameterized queries.
     protected void DoLogin(object sender, EventArgs e)
     {
         var cs = ConfigurationManager.ConnectionStrings["AppDb"].ConnectionString;

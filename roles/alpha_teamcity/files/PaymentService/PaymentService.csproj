@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Classic (non-SDK) .NET Framework 4.8 project so it builds with the MSBuild.exe
      bundled with Visual Studio 2022 (present on XY1-ALPHA) WITHOUT needing a separate
-     .NET SDK download. This is the clean project; the poison lives in files/poison/. -->
+     .NET SDK download. -->
 <Project ToolsVersion="Current" DefaultTargets="Build"
          xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props"

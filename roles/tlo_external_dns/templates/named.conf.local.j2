@@ -1,11 +1,9 @@
 // {{ ansible_managed }}
-// TLO External DNS — authoritative master for {{ dns_zone }}.
+// Authoritative master for {{ dns_zone }}.
 zone "{{ dns_zone }}" {
     type master;
     file "/etc/bind/db.{{ dns_zone }}";
 
-    // INTENTIONAL MISCONFIG: per-zone AXFR open to anyone (belt-and-suspenders
-    // with the global allow-transfer). `dig axfr {{ dns_zone }} @<this-host>`.
     allow-transfer { any; };
     notify no;
 };

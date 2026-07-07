@@ -1,6 +1,5 @@
 # {{ ansible_managed }}
-# TLO CorpVPN weak dashboard. Default creds ({{ portal_user }}:{{ portal_pass }}),
-# serves + lists the .ovpn, and intentionally leaks server/backend headers.
+# CorpVPN remote-access portal (nginx). Serves and lists the client profile.
 server {
     listen 80 default_server;
     listen [::]:80 default_server;
@@ -11,15 +10,14 @@ server {
     ssl_certificate     /etc/ssl/certs/corpvpn.crt;
     ssl_certificate_key /etc/ssl/private/corpvpn.key;
 
-    # --- Intentional information leaks (M1.2 `curl -I` recon) ---
-    server_tokens on;                                              # leak nginx version in Server:
+    server_tokens on;
     add_header X-Powered-By "{{ portal_header_powered_by }}" always;
     add_header X-Backend "{{ portal_header_backend }}" always;
 
     root {{ web_root }};
     index index.html;
 
-    # Default-cred gate (M1.3). HTTP Basic — admin:admin.
+    # HTTP Basic authentication.
     auth_basic "CorpVPN Portal - Authentication Required";
     auth_basic_user_file /etc/nginx/.htpasswd;
 
@@ -37,7 +35,7 @@ server {
         add_header X-Backend "{{ portal_header_backend }}" always;
     }
 
-    # Directory listing so the profile is discoverable (M1.4).
+    # Directory listing for client profiles.
     location /downloads/ {
         alias {{ web_root }}/downloads/;
         autoindex on;

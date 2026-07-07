@@ -1,6 +1,6 @@
 ---
 # =============================================================================
-# tlo_external_dns — authoritative bind9 for tlo-corp.com with AXFR leak
+# tlo_external_dns — authoritative bind9 for meridianfreight.com with AXFR leak
 # =============================================================================
 # Idempotent; safe to re-run.
 
@@ -77,7 +77,7 @@
     mode: "0644"
   notify: restart bind9
 
-- name: Deploy the tlo-corp.com zone file
+- name: Deploy the meridianfreight.com zone file
   become: true
   ansible.builtin.template:
     src: db.zone.j2

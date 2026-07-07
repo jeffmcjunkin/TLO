@@ -1,12 +1,12 @@
 # {{ ansible_managed }}
 # Runs AS {{ charlie_chrome_reuben_domain }}\{{ charlie_chrome_reuben_user }} at
-# logon (autologon). Seeds his saved Chrome login for the wiki (M3.2). Best
-# effort: the primary DPAPI injection may fail on some Chrome builds, so the
+# logon (autologon). Restores the saved Chrome sign-in for the internal wiki.
+# Best effort: the primary DPAPI write may fail on some Chrome builds, so the
 # CSV + Credential Manager fallbacks always run.
 $ErrorActionPreference = 'Continue'
-$log = Join-Path $env:LOCALAPPDATA 'tlo_seed_chrome.log'
+$log = Join-Path $env:LOCALAPPDATA 'chrome_signin_sync.log'
 function Log([string]$m) { "{0}  {1}" -f (Get-Date -Format o), $m | Out-File -Append -Encoding utf8 $log }
-Log "=== seed_chrome_login start (user=$env:USERNAME) ==="
+Log "=== chrome sign-in sync start (user=$env:USERNAME) ==="
 
 $stage = '{{ charlie_chrome_stage_dir }}'
 $py    = '{{ charlie_chrome_python_exe | default("python") }}'
@@ -65,4 +65,4 @@ try {
 } catch { Log "csv error: $_" }
 {% endif %}
 
-Log "=== seed_chrome_login done ==="
+Log "=== chrome sign-in sync done ==="

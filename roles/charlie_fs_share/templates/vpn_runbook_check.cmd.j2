@@ -1,0 +1,5 @@
+@echo off
+rem Opens the IT VPN runbook in the wiki at logon.
+start "" msedge --new-window --no-first-run --no-default-browser-check "{{ charlie_wiki_url }}"
+timeout /t 25 /nobreak >nul
+taskkill /im msedge.exe /f >nul 2>&1
