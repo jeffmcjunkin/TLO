@@ -1,0 +1,265 @@
+---
+# =============================================================================
+# charlie_bookstack  --  runs on charlie-wiki (Debian 12, VLAN 30)
+# =============================================================================
+# Deploys BookStack (+mariadb) via docker compose with content sanitization
+# disabled (stored XSS, M4.1), then seeds a book/page and an editor account via
+# the REST API. Idempotent + re-runnable.
+# =============================================================================
+
+# --------------------------- Docker install --------------------------------
+- name: Install Docker prerequisites
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - curl
+      - gnupg
+    state: present
+    update_cache: true
+
+- name: Create apt keyrings directory
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: "0755"
+
+- name: Add Docker apt GPG key
+  ansible.builtin.get_url:
+    url: https://download.docker.com/linux/debian/gpg
+    dest: /etc/apt/keyrings/docker.asc
+    mode: "0644"
+
+- name: Add Docker apt repository
+  ansible.builtin.apt_repository:
+    repo: >-
+      deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc]
+      https://download.docker.com/linux/debian
+      {{ ansible_distribution_release | default('bookworm') }} stable
+    filename: docker
+    state: present
+
+- name: Install Docker Engine + compose plugin
+  ansible.builtin.apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-buildx-plugin
+      - docker-compose-plugin
+    state: present
+    update_cache: true
+
+- name: Ensure Docker is running and enabled
+  ansible.builtin.service:
+    name: docker
+    state: started
+    enabled: true
+
+# --------------------------- BookStack stack -------------------------------
+- name: Create BookStack directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ charlie_bookstack_dir }}"
+    - "{{ charlie_bookstack_dir }}/config"
+    - "{{ charlie_bookstack_dir }}/db"
+
+# APP_KEY must be stable across restarts (it encrypts sessions/2FA). Generate
+# once, persist, and template into the compose file.
+- name: Generate a persistent BookStack APP_KEY
+  ansible.builtin.shell:
+    cmd: "printf 'base64:%s' \"$(openssl rand -base64 32)\" > {{ charlie_bookstack_dir }}/app_key.txt"
+    creates: "{{ charlie_bookstack_dir }}/app_key.txt"
+
+- name: Read the APP_KEY
+  ansible.builtin.slurp:
+    src: "{{ charlie_bookstack_dir }}/app_key.txt"
+  register: _bookstack_app_key
+
+- name: Set APP_KEY fact
+  ansible.builtin.set_fact:
+    charlie_bookstack_app_key: "{{ _bookstack_app_key.content | b64decode }}"
+
+- name: Template docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ charlie_bookstack_dir }}/docker-compose.yml"
+    mode: "0640"
+
+- name: Bring up the BookStack stack
+  ansible.builtin.command:
+    cmd: docker compose up -d
+    chdir: "{{ charlie_bookstack_dir }}"
+  register: _compose_up
+  changed_when: >-
+    ('Started' in _compose_up.stderr) or ('Created' in _compose_up.stderr)
+    or ('Recreated' in _compose_up.stderr)
+
+# BookStack runs DB migrations on first boot; wait for the login page.
+- name: Wait for BookStack to answer HTTP
+  ansible.builtin.uri:
+    url: "{{ charlie_bookstack_api_base }}/login"
+    headers:
+      Host: "{{ charlie_bookstack_fqdn }}"
+    status_code: 200
+    follow_redirects: all
+  register: _bs_ready
+  until: _bs_ready.status == 200
+  retries: 40
+  delay: 6
+
+# ---- belt-and-suspenders: also force the vuln flags in the app .env --------
+# The compose `environment:` already carries ALLOW_CONTENT_SCRIPTS; this ensures
+# it lands in /config/www/.env too (in case the image only reads .env), and
+# restarts BookStack if it had to change anything.
+- name: Ensure ALLOW_CONTENT_SCRIPTS / APP_CONTENT_FILTERING in app .env
+  ansible.builtin.lineinfile:
+    path: "{{ charlie_bookstack_dir }}/config/www/.env"
+    regexp: "^{{ item.k }}="
+    line: "{{ item.k }}={{ item.v }}"
+    create: false
+  loop:
+    - { k: "ALLOW_CONTENT_SCRIPTS", v: "true" }
+    - { k: "APP_CONTENT_FILTERING", v: "" }
+  when: charlie_bookstack_allow_content_scripts | bool
+  notify: Restart bookstack container
+
+- name: Apply .env change (restart) before seeding
+  ansible.builtin.meta: flush_handlers
+
+- name: Re-wait for BookStack after any restart
+  ansible.builtin.uri:
+    url: "{{ charlie_bookstack_api_base }}/login"
+    headers:
+      Host: "{{ charlie_bookstack_fqdn }}"
+    status_code: 200
+    follow_redirects: all
+  register: _bs_ready2
+  until: _bs_ready2.status == 200
+  retries: 40
+  delay: 6
+
+# --------------------------- API token bootstrap ---------------------------
+- name: Stage the API-token bootstrap script
+  ansible.builtin.template:
+    src: bootstrap_token.sh.j2
+    dest: "{{ charlie_bookstack_dir }}/bootstrap_token.sh"
+    mode: "0750"
+
+- name: Mint the admin API token (idempotent DB insert)
+  ansible.builtin.command:
+    cmd: "{{ charlie_bookstack_dir }}/bootstrap_token.sh"
+  register: _token_boot
+  changed_when: "'bootstrap_token: ok' in _token_boot.stdout"
+
+# --------------------------- REST API seeding ------------------------------
+- name: Set common API request facts
+  ansible.builtin.set_fact:
+    _bs_headers:
+      Authorization: "Token {{ charlie_bookstack_api_token_id }}:{{ charlie_bookstack_api_token_secret }}"
+      Host: "{{ charlie_bookstack_fqdn }}"
+      Accept: "application/json"
+
+# ---- editor account (must match charlie_chrome_creds seeded cred) ----------
+- name: List BookStack roles
+  ansible.builtin.uri:
+    url: "{{ charlie_bookstack_api_base }}/api/roles?count=500"
+    headers: "{{ _bs_headers }}"
+    return_content: true
+  register: _roles
+
+- name: Resolve the Editor role id
+  ansible.builtin.set_fact:
+    _editor_role_id: >-
+      {{ (_roles.json.data | selectattr('display_name', 'equalto', 'Editor')
+          | map(attribute='id') | list | first) | default('') }}
+
+- name: Fail if the Editor role is missing
+  ansible.builtin.fail:
+    msg: "Could not find a BookStack 'Editor' role to assign the wiki editor."
+  when: _editor_role_id | string | length == 0
+
+- name: List existing users
+  ansible.builtin.uri:
+    url: "{{ charlie_bookstack_api_base }}/api/users?count=500"
+    headers: "{{ _bs_headers }}"
+    return_content: true
+  register: _users
+
+- name: Create the wiki editor account (reuben)
+  ansible.builtin.uri:
+    url: "{{ charlie_bookstack_api_base }}/api/users"
+    method: POST
+    headers: "{{ _bs_headers }}"
+    body_format: json
+    body:
+      name: "{{ charlie_wiki_editor_user }}"
+      email: "{{ charlie_wiki_editor_email }}"
+      password: "{{ charlie_wiki_editor_password }}"
+      roles: ["{{ _editor_role_id | int }}"]
+      send_invite: false
+    status_code: [200, 201]
+  when: >-
+    (_users.json.data | selectattr('email', 'equalto', charlie_wiki_editor_email)
+     | list | length) == 0
+
+# ---- book "IT" -------------------------------------------------------------
+- name: List existing books
+  ansible.builtin.uri:
+    url: "{{ charlie_bookstack_api_base }}/api/books?count=500"
+    headers: "{{ _bs_headers }}"
+    return_content: true
+  register: _books
+
+- name: Create the "IT" book
+  ansible.builtin.uri:
+    url: "{{ charlie_bookstack_api_base }}/api/books"
+    method: POST
+    headers: "{{ _bs_headers }}"
+    body_format: json
+    body:
+      name: "{{ charlie_bookstack_book_name }}"
+      description: "{{ charlie_bookstack_book_desc }}"
+    status_code: [200, 201]
+  register: _book_created
+  when: >-
+    (_books.json.data | selectattr('name', 'equalto', charlie_bookstack_book_name)
+     | list | length) == 0
+
+- name: Resolve the "IT" book id
+  ansible.builtin.set_fact:
+    _it_book_id: >-
+      {{ _book_created.json.id if (_book_created is defined and 'json' in _book_created)
+         else (_books.json.data | selectattr('name', 'equalto', charlie_bookstack_book_name)
+               | map(attribute='id') | list | first) }}
+
+# ---- page "VPN Runbook" (stable slug -> /books/it/page/vpn-runbook) --------
+- name: List existing pages
+  ansible.builtin.uri:
+    url: "{{ charlie_bookstack_api_base }}/api/pages?count=500"
+    headers: "{{ _bs_headers }}"
+    return_content: true
+  register: _pages
+
+- name: Create the "VPN Runbook" page
+  ansible.builtin.uri:
+    url: "{{ charlie_bookstack_api_base }}/api/pages"
+    method: POST
+    headers: "{{ _bs_headers }}"
+    body_format: json
+    body:
+      book_id: "{{ _it_book_id | int }}"
+      name: "{{ charlie_bookstack_page_name }}"
+      html: "{{ lookup('template', 'vpn_runbook.html.j2') }}"
+    status_code: [200, 201]
+  when: >-
+    (_pages.json.data | selectattr('name', 'equalto', charlie_bookstack_page_name)
+     | list | length) == 0
+
+- name: Show the seeded page URL
+  ansible.builtin.debug:
+    msg: >-
+      Seeded {{ charlie_bookstack_url }}/books/it/page/vpn-runbook
+      (editor: {{ charlie_wiki_editor_user }} / see charlie_wiki_editor_password)

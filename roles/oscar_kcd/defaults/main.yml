@@ -1,0 +1,20 @@
+---
+# oscar.local domain (matches range-config.yml)
+oscar_domain_fqdn: oscar.local
+oscar_domain_dn: "DC=oscar,DC=local"
+
+# Service account used as the MSSQL service logon and the constrained-delegation principal.
+# Must exist in AD before badsectorlabs.ludus_mssql configures the SQL service logon on OSCAR-DB.
+oscar_svc_mssql_user: svc_mssql
+oscar_svc_mssql_password: "Sql!Svc_Oscar1"
+
+# Privileged user impersonated via S4U in Milestone 5.5.
+oscar_privileged_user: oscaradmin
+oscar_privileged_password: "Oscar!Adm1n_2026"
+
+# OU that holds OPERATOR-WS1 (LAPS role targets this OU).
+oscar_workstations_ou_name: "Workstations"
+
+# Kerberos SPNs / delegation targets.
+oscar_mssql_spn: "MSSQLSvc/oscar-db.oscar.local:1433"
+oscar_kcd_allowed_spn: "cifs/operator-ws1.oscar.local"

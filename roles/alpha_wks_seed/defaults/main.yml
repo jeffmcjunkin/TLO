@@ -1,0 +1,29 @@
+---
+# =====================================================================
+# alpha_wks_seed — defaults
+# Plant a believable, credential-leaking PSReadline history on ALPHA-WKS (M7.4).
+# =====================================================================
+
+alpha_wks_user: "devuser"
+# PSReadline persists per-user command history to this exact path.
+alpha_wks_history_dir: 'C:\Users\{{ alpha_wks_user }}\AppData\Roaming\Microsoft\Windows\PowerShell\PSReadline'
+alpha_wks_history_file: '{{ alpha_wks_history_dir }}\ConsoleHost_history.txt'
+
+# ---- SHARED SECRET: GitLab PAT (glpat- + 20 chars) ----
+# This MUST equal `alpha_gitlab_pat` in alpha_gitlab_seed (the role that mints it)
+# and the value hardcoded-then-"removed" in the crafted GitLab git history.
+# Set it once at the range level via role_vars to keep every host consistent.
+alpha_gitlab_pat: "glpat-TLOtoken0123456789ab"
+alpha_gitlab_host: "gitlab.alpha.local"
+alpha_gitlab_group: "alpha"
+alpha_gitlab_project: "payment-service"
+
+# ---- Leaked DB creds: appuser on ALPHA-SECRETS (design update: single SQL host) ----
+alpha_wks_mssql_host: "ALPHA-SECRETS"
+alpha_wks_mssql_user: "appuser"
+alpha_wks_mssql_password: "Wint3r2024!"
+
+# ---- Leaked svc_build creds (SHARED with alpha_ad_content / alpha_teamcity) ----
+alpha_wks_teamcity_host: "XY1-ALPHA"
+alpha_svc_build_user: "svc_build"
+alpha_svc_build_password: "Bu1ld.Agent.2025!"

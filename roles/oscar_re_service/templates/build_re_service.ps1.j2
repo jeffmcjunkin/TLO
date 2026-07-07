@@ -1,0 +1,92 @@
+# Builds + installs the OscarC2Agent reverse-engineering training service (benign crackme).
+# Derives the AES key deterministically, encrypts the C2 credential string at build time so the
+# decrypt is reproducible, compiles a small .NET service, and stores the key under a SYSTEM-only
+# registry DACL so a local admin must reach SYSTEM (SeImpersonate) to read it. Isolated lab only.
+$ErrorActionPreference = 'Stop'
+$seed       = "{{ oscar_re_key_seed }}"
+$plain      = "{{ oscar_c2_admin_user }}:{{ oscar_c2_admin_password }}"
+$installDir = "{{ oscar_re_install_dir }}"
+$svc        = "{{ oscar_re_service_name }}"
+$exe        = Join-Path $installDir "$svc.exe"
+
+# Idempotency: if already installed, do nothing (the DACL is intentionally not admin-writable).
+if ((Get-Service -Name $svc -ErrorAction SilentlyContinue) -and (Test-Path $exe)) {
+    Write-Output "already installed"; exit 0
+}
+
+# --- derive AES-256 key = SHA256(seed) ---
+$key = [System.Security.Cryptography.SHA256]::Create().ComputeHash([System.Text.Encoding]::UTF8.GetBytes($seed))
+
+# --- AES-256-CBC encrypt the credential string; blob = IV(16) || ciphertext ---
+$aes = [System.Security.Cryptography.Aes]::Create()
+$aes.KeySize = 256; $aes.Key = $key; $aes.Mode = 'CBC'; $aes.Padding = 'PKCS7'; $aes.GenerateIV()
+$enc  = $aes.CreateEncryptor()
+$pt   = [System.Text.Encoding]::UTF8.GetBytes($plain)
+$ct   = $enc.TransformFinalBlock($pt, 0, $pt.Length)
+$blob = New-Object byte[] ($aes.IV.Length + $ct.Length)
+[Array]::Copy($aes.IV, 0, $blob, 0, $aes.IV.Length)
+[Array]::Copy($ct, 0, $blob, $aes.IV.Length, $ct.Length)
+$b64 = [Convert]::ToBase64String($blob)
+
+# --- C# source: reads the key from the SYSTEM-only registry value, decrypts the embedded blob ---
+$cs = @"
+using System;
+using System.IO;
+using System.ServiceProcess;
+using System.Security.Cryptography;
+using System.Text;
+using Microsoft.Win32;
+namespace OscarC2 {
+  public class Agent : ServiceBase {
+    // AES-256-CBC ciphertext of the C2 management credentials: base64( IV[16] || ciphertext ).
+    const string EncBlob = "$b64";
+    static void Main() { ServiceBase.Run(new Agent()); }
+    public Agent() { this.ServiceName = "$svc"; }
+    protected override void OnStart(string[] args) {
+      try {
+        string creds = Decrypt();
+        Directory.CreateDirectory(@"C:\ProgramData\OscarC2");
+        File.AppendAllText(@"C:\ProgramData\OscarC2\agent.log", DateTime.Now + " OscarC2Agent online\n");
+      } catch { }
+    }
+    protected override void OnStop() { }
+    static string Decrypt() {
+      byte[] key = (byte[])Registry.GetValue(@"HKEY_LOCAL_MACHINE\SOFTWARE\OscarC2\Agent", "KeyBlob", null);
+      byte[] blob = Convert.FromBase64String(EncBlob);
+      byte[] iv = new byte[16]; Array.Copy(blob, 0, iv, 0, 16);
+      using (var aes = Aes.Create()) {
+        aes.Key = key; aes.IV = iv; aes.Mode = CipherMode.CBC; aes.Padding = PaddingMode.PKCS7;
+        using (var d = aes.CreateDecryptor())
+          return Encoding.UTF8.GetString(d.TransformFinalBlock(blob, 16, blob.Length - 16));
+      }
+    }
+  }
+}
+"@
+
+New-Item -ItemType Directory -Force -Path $installDir | Out-Null
+$srcFile = Join-Path $env:TEMP "OscarC2Agent.cs"
+Set-Content -Path $srcFile -Value $cs -Encoding UTF8
+
+# --- compile with the in-box C# compiler (no Visual Studio needed) ---
+$csc = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
+& $csc /nologo /target:exe /out:"$exe" /r:System.ServiceProcess.dll "$srcFile"
+if (-not (Test-Path $exe)) { throw "csc failed to produce $exe" }
+Remove-Item $srcFile -Force -ErrorAction SilentlyContinue
+
+# --- store the key under a SYSTEM-only registry DACL (local admin cannot read it) ---
+New-Item -Path "{{ oscar_re_reg_key }}" -Force | Out-Null
+New-ItemProperty -Path "{{ oscar_re_reg_key }}" -Name "KeyBlob" -PropertyType Binary -Value $key -Force | Out-Null
+$acl = New-Object System.Security.AccessControl.RegistrySecurity
+$acl.SetAccessRuleProtection($true, $false)   # break inheritance, drop inherited ACEs
+$rule = New-Object System.Security.AccessControl.RegistryAccessRule(
+    "NT AUTHORITY\SYSTEM", "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow")
+$acl.AddAccessRule($rule)
+Set-Acl -Path "{{ oscar_re_reg_key }}" -AclObject $acl
+
+# --- register + start the service ---
+if (-not (Get-Service -Name $svc -ErrorAction SilentlyContinue)) {
+    New-Service -Name $svc -BinaryPathName "`"$exe`"" -DisplayName "Oscar C2 Agent" -StartupType Automatic | Out-Null
+}
+Start-Service -Name $svc -ErrorAction SilentlyContinue
+Write-Output "installed"

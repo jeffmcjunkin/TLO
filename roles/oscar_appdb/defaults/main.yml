@@ -1,0 +1,4 @@
+---
+oscar_appdb_name: AppDb
+# Copied to the DB host then executed with sqlcmd under the deploy (local admin) context.
+oscar_appdb_sql_remote_path: 'C:\Windows\Temp\appdb_seed.sql'

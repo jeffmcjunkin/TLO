@@ -1,0 +1,23 @@
+---
+# charlie_bookstack -- BookStack wiki with content sanitization disabled (XSS)
+dependencies: []
+
+galaxy_info:
+  role_name: charlie_bookstack
+  author: TLO range authoring
+  description: >-
+    Deploys BookStack (lscr.io/linuxserver/bookstack + mariadb) via docker
+    compose with ALLOW_CONTENT_SCRIPTS=true so page content is rendered
+    unsanitized (stored XSS by design, M4.1). Seeds a book "IT" + page
+    "VPN Runbook" at a stable URL and an editor account via the REST API.
+  company: TLO
+  license: MIT
+  min_ansible_version: "2.12"
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm
+
+collections:
+  - ansible.builtin
+  - community.general

@@ -1,0 +1,25 @@
+---
+# oscar_vulnweb — TLO training range (oscar.local)
+# Deploys a deliberately-vulnerable ASP.NET WebForms training app (SQL injection sink +
+# static/leaked machineKey for ViewState practice) on IIS. Milestone 5. Isolated lab only.
+dependencies: []
+
+galaxy_info:
+  role_name: oscar_vulnweb
+  author: TLO range
+  description: >
+    Deploy a deliberately-vulnerable ASP.NET WebForms training application on IIS for the
+    TLO security-training range (Milestone 5: SQLi + ViewState). Analogous to DVWA/WebGoat.
+    Authorized isolated-lab use only.
+  company: The Last Ones range
+  license: GPL-3.0-or-later
+  min_ansible_version: "2.14"
+  platforms:
+    - name: Windows
+      versions:
+        - "2022"
+  galaxy_tags:
+    - ludus
+    - iis
+    - aspnet
+    - security_lab

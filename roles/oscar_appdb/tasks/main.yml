@@ -1,0 +1,21 @@
+---
+# Runs on OSCAR-DB after badsectorlabs.ludus_mssql. Creates AppDb + seed data via sqlcmd
+# (authenticated as sa, which the mssql role enabled). Idempotent (guards inside the .sql).
+
+- name: Copy AppDb seed script to the DB host
+  ansible.windows.win_copy:
+    src: appdb_seed.sql
+    dest: "{{ oscar_appdb_sql_remote_path }}"
+
+- name: Create AppDb schema + seed data
+  ansible.windows.win_command: >-
+    sqlcmd -S localhost -U sa -P "{{ oscar_mssql_sa_password }}"
+    -b -i "{{ oscar_appdb_sql_remote_path }}"
+  register: _appdb_sqlcmd
+  changed_when: _appdb_sqlcmd.rc == 0
+  no_log: false
+
+- name: Remove the seed script
+  ansible.windows.win_file:
+    path: "{{ oscar_appdb_sql_remote_path }}"
+    state: absent

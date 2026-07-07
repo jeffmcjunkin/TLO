@@ -1,0 +1,115 @@
+#!/usr/bin/env bash
+# =====================================================================
+# Offline git-history builder for alpha/payment-service (M7.3 + M7.5).
+# Assembles a repo whose history contains hardcoded prod DB creds + the GitLab
+# PAT in one commit, then "removes" them in a later commit. The secrets are gone
+# from HEAD but SURVIVE in `git log -p` / gitleaks. Finally commits a .gitlab-ci.yml
+# that consumes the masked CI/CD variables. Pushed over HTTP with the deterministic PAT.
+# Rendered by Ansible (Jinja has already substituted the secret values below).
+# =====================================================================
+set -euo pipefail
+
+BUILD_DIR="{{ alpha_gitlab_build_dir }}"
+REPO_URL="http://oauth2:{{ alpha_gitlab_pat }}@127.0.0.1/{{ alpha_gitlab_group }}/{{ alpha_gitlab_project }}.git"
+
+rm -rf "$BUILD_DIR"
+mkdir -p "$BUILD_DIR"
+cd "$BUILD_DIR"
+
+git init -q -b main
+git config user.email "devuser@alpha.local"
+git config user.name  "Dev User"
+
+# ---------- commit 1: clean skeleton ----------
+mkdir -p config src scripts
+cat > README.md <<'EOF'
+# payment-service
+
+Internal payment processing microservice (ALPHA). Built by the TeamCity CI pipeline
+on XY1-ALPHA. See `.gitlab-ci.yml` for the build/deploy stages.
+EOF
+cat > src/Program.cs <<'EOF'
+using System;
+namespace PaymentService {
+    public static class Program {
+        public static void Main() => Console.WriteLine("payment-service");
+    }
+}
+EOF
+git add -A
+git commit -q -m "Initial import of payment-service"
+
+# ---------- commit 2: HARDCODE prod DB creds + CI token (THE SECRET) ----------
+cat > config/database.yml <<'EOF'
+production:
+  adapter:  sqlserver
+  host:     {{ alpha_prod_db_host }}
+  database: {{ alpha_prod_db_name }}
+  username: {{ alpha_prod_db_user }}
+  password: "{{ alpha_prod_db_password }}"
+
+# CI deploy token used by scripts/deploy.sh (TODO: move to a secret store)
+CI_API_TOKEN: "{{ alpha_gitlab_pat }}"
+EOF
+cat > scripts/deploy.sh <<'EOF'
+#!/usr/bin/env bash
+# deploy using the CI token from config/database.yml
+curl --header "PRIVATE-TOKEN: ${CI_API_TOKEN}" "https://gitlab.alpha.local/api/v4/projects"
+EOF
+git add -A
+git commit -q -m "Add production database config and deploy helper"
+
+# ---------- commit 3: unrelated feature (spacer) ----------
+cat > src/Refund.cs <<'EOF'
+namespace PaymentService { public static class Refund { } }
+EOF
+git add -A
+git commit -q -m "Add refund handler skeleton"
+
+# ---------- commit 4: "remove" the secrets (they SURVIVE in history) ----------
+cat > config/database.yml <<'EOF'
+production:
+  adapter:  sqlserver
+  host:     <%= ENV['PROD_DB_HOST'] %>
+  database: <%= ENV['PROD_DB_NAME'] %>
+  username: <%= ENV['PROD_DB_USER'] %>
+  password: <%= ENV['PROD_DB_PASSWORD'] %>
+EOF
+cat > scripts/deploy.sh <<'EOF'
+#!/usr/bin/env bash
+# deploy using the CI token from the environment (no longer hardcoded)
+curl --header "PRIVATE-TOKEN: ${CI_API_TOKEN}" "https://gitlab.alpha.local/api/v4/projects"
+EOF
+git add -A
+git commit -q -m "Move DB password and API token to environment variables (security)"
+
+# ---------- commit 5: .gitlab-ci.yml consuming the masked CI/CD variables (M7.5) ----------
+cat > .gitlab-ci.yml <<'EOF'
+stages:
+  - build
+  - deploy
+
+build:
+  stage: build
+  script:
+    - echo "Building payment-service"
+    - dotnet build -c Release || true
+
+deploy:
+  stage: deploy
+  script:
+    # Masking only scrubs these from the job LOG; the plaintext is live in the
+    # job environment. An attacker who can edit this file simply re-encodes them.
+    - echo "Deploying to $PROD_DB_HOST"
+    - echo "$PROD_DB_PASSWORD" | base64
+    - echo "$AWS_SECRET_KEY"   | base64
+    - echo "$DEPLOY_SSH_KEY"   | base64 -d > /tmp/deploy_key
+  only:
+    - main
+EOF
+git add -A
+git commit -q -m "Add GitLab CI pipeline"
+
+# ---------- push (force so re-runs are deterministic/idempotent) ----------
+git push -q -f "$REPO_URL" main
+echo "pushed crafted history to {{ alpha_gitlab_group }}/{{ alpha_gitlab_project }}"

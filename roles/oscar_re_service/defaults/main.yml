@@ -1,0 +1,13 @@
+---
+oscar_re_service_name: OscarC2Agent
+oscar_re_install_dir: 'C:\Program Files\OscarC2'
+oscar_re_reg_key: 'HKLM:\SOFTWARE\OscarC2\Agent'
+
+# The AES-256 key is derived deterministically as SHA256(seed) at build time and stored in the
+# registry KeyBlob under a SYSTEM-only DACL. Deterministic so the decrypt is reproducible.
+oscar_re_key_seed: "OscarC2-KeyMaterial-2026"
+
+# Plaintext the service decrypts (recovered in Milestone 6.3). MUST equal oscar_hardhat's admin
+# credentials so the recovered value logs into HardHat. Keep in sync with roles/oscar_hardhat.
+oscar_c2_admin_user: "HardHat_Admin"
+oscar_c2_admin_password: "H@rdHat_C2_Admin!2026"

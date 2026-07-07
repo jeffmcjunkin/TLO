@@ -1,0 +1,92 @@
+---
+# =====================================================================
+# create_build_config.yml — best-effort TeamCity project + build config over REST.
+#
+# HONEST FLAGS:
+#  * On a brand-new TeamCity, the first-run wizard (accept license, pick the internal
+#    HSQLDB, create the first admin) must be completed before REST is fully usable.
+#    There is no clean REST call to complete that wizard, so this step may not succeed
+#    until an operator opens http://XY1-ALPHA:8111 once. That is why it is wrapped in
+#    block/rescue and NEVER fails the deploy.
+#  * Auth uses TeamCity's "super user" token, which the server writes to
+#    logs/teamcity-server.log on each start. We grep the most recent one and use it as
+#    the HTTP Basic password with an EMPTY username (the documented super-user login).
+#  Ref: https://www.jetbrains.com/help/teamcity/super-user.html
+#  Ref: https://www.jetbrains.com/help/teamcity/rest/manage-projects.html
+# The build step just runs build.cmd, which locates MSBuild via vswhere and builds the
+# project on disk — so no VCS root is required for the poison to detonate on the agent.
+# =====================================================================
+
+- name: Create TeamCity project + build config (best-effort)
+  block:
+    - name: Locate the super-user token in the TeamCity server log
+      ansible.windows.win_shell: |
+        $paths = @(
+          "{{ alpha_teamcity_install_dir }}\logs\teamcity-server.log",
+          "{{ alpha_teamcity_data_dir }}\logs\teamcity-server.log"
+        )
+        $token = $null
+        foreach ($p in $paths) {
+          if (Test-Path $p) {
+            $m = Select-String -Path $p -Pattern 'Super user authentication token:\s*(\d+)' -AllMatches
+            if ($m) { $token = ($m.Matches | Select-Object -Last 1).Groups[1].Value }
+          }
+        }
+        if (-not $token) { Write-Error "no super-user token found yet" }
+        $token
+      register: tc_token
+      changed_when: false
+
+    - name: Create the TeamCity project "PaymentService"
+      ansible.windows.win_uri:
+        url: "http://localhost:{{ alpha_teamcity_port }}/app/rest/projects"
+        method: POST
+        url_username: ""
+        url_password: "{{ tc_token.stdout | trim }}"
+        force_basic_auth: true
+        headers:
+          Content-Type: application/json
+          Accept: application/json
+        body: '{"name":"PaymentService","id":"PaymentService"}'
+        status_code: [200, 400]   # 400 => already exists
+      register: tc_proj
+
+    - name: Create the build configuration "Build"
+      ansible.windows.win_uri:
+        url: "http://localhost:{{ alpha_teamcity_port }}/app/rest/buildTypes"
+        method: POST
+        url_username: ""
+        url_password: "{{ tc_token.stdout | trim }}"
+        force_basic_auth: true
+        headers:
+          Content-Type: application/json
+          Accept: application/json
+        body: '{"name":"Build","project":{"id":"PaymentService"}}'
+        return_content: true
+        status_code: [200, 400]
+      register: tc_bt
+
+    - name: Add the MSBuild command-line step (runs build.cmd -> builds the C# project)
+      ansible.windows.win_uri:
+        url: "http://localhost:{{ alpha_teamcity_port }}/app/rest/buildTypes/id:PaymentService_Build/steps"
+        method: POST
+        url_username: ""
+        url_password: "{{ tc_token.stdout | trim }}"
+        force_basic_auth: true
+        headers:
+          Content-Type: application/json
+          Accept: application/json
+        # Built with to_json so the Windows path backslashes are escaped correctly.
+        body: '{{ {"name": "MSBuild payment-service", "type": "simpleRunner", "properties": {"property": [{"name": "use.custom.script", "value": "true"}, {"name": "script.content", "value": alpha_teamcity_project_dest ~ "\\build.cmd"}, {"name": "teamcity.step.mode", "value": "default"}]}} | to_json }}'
+        status_code: [200, 400]
+      register: tc_step
+
+  rescue:
+    - name: TeamCity build-config creation deferred (complete first-run wizard, then re-run)
+      ansible.builtin.debug:
+        msg: >-
+          Could not create the TeamCity project/build-config over REST yet (likely the
+          first-run setup wizard at http://XY1-ALPHA:{{ alpha_teamcity_port }} has not
+          been completed). The C# project, poison patch, and DA build agent are already
+          in place; re-run this role after completing first-run, or create the build
+          config manually pointing its step at {{ alpha_teamcity_project_dest }}\build.cmd.

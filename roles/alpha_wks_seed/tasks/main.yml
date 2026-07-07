@@ -1,0 +1,24 @@
+---
+# =====================================================================
+# alpha_wks_seed — plant PSReadline ConsoleHost_history.txt (M7.4)
+# The autologon devuser (set in range-config.yml for ALPHA-WKS) owns
+# C:\Users\devuser once it has logged in at least once. We ensure the
+# PSReadline directory exists and drop a believable history the attacker loots.
+# Ref: PSReadline history file:
+#   https://learn.microsoft.com/powershell/module/psreadline/about/about_psreadline
+# =====================================================================
+
+# C:\Users\devuser is created on first interactive (autologon) logon. If this role
+# runs before that, win_file still creates the directory tree so the plant lands;
+# PSReadline will simply append to it on the user's first PowerShell session.
+- name: Ensure PSReadline directory exists for {{ alpha_wks_user }}
+  ansible.windows.win_file:
+    path: "{{ alpha_wks_history_dir }}"
+    state: directory
+
+- name: Plant PSReadline ConsoleHost_history.txt with leaked credentials (M7.4)
+  ansible.windows.win_template:
+    src: ConsoleHost_history.txt.j2
+    dest: "{{ alpha_wks_history_file }}"
+    newline_sequence: "\r\n"   # Windows line endings so the file looks native
+    force: true

@@ -1,0 +1,158 @@
+---
+# =============================================================================
+# charlie_fs_share  --  runs on CHARLIE-FS (member server, charlie.local)
+# =============================================================================
+# Creates two SMB shares and plants the loot:
+#   * IT$      -- anonymous/guest READ, holds VPN_Setup_Notes.txt   (M2.1/M2.2)
+#   * Backups  -- Domain Users READ,   holds passwords.kdbx          (M4.4)
+# The DC-side "anon_share_access" GPO relaxes the CLIENT side (AllowInsecureGuest
+# on domain workstations); the tasks below relax the SERVER side so a Linux
+# attacker doing a null/guest session (`smbclient -N`, `nxc smb -u '' -p ''`)
+# can read IT$.
+#
+# NOTE (cross-role dependency, not done here): ludus_local_users_and_groups on
+# AREUBEN-WS adds svc_helpdesk + helpdesk_admin to local Administrators.
+# =============================================================================
+
+- name: Derive NetBIOS domain name from FQDN
+  ansible.builtin.set_fact:
+    charlie_netbios: "{{ charlie_fqdn.split('.')[0] | upper }}"
+
+# --- share backing directories ---------------------------------------------
+- name: Create share directories
+  ansible.windows.win_file:
+    path: "{{ item }}"
+    state: directory
+  loop:
+    - "{{ charlie_it_share_path }}"
+    - "{{ charlie_backups_share_path }}"
+
+# =============================================================================
+# Server-side anonymous/guest enablement (so the attacker's null session on the
+# IT$ share succeeds). This is the CHARLIE-FS half of the anonymous-share vuln.
+# =============================================================================
+- name: Enable the local Guest account (target of the null/guest session)
+  ansible.windows.win_user:
+    name: Guest
+    account_disabled: false
+
+- name: LSA -- treat anonymous as Everyone and drop anonymous restrictions
+  ansible.windows.win_regedit:
+    path: HKLM:\SYSTEM\CurrentControlSet\Control\Lsa
+    name: "{{ item.name }}"
+    data: "{{ item.data }}"
+    type: dword
+  loop:
+    - { name: everyoneincludesanonymous, data: 1 }   # Everyone ACE covers anon
+    - { name: restrictanonymous, data: 0 }
+    - { name: restrictanonymoussam, data: 0 }
+
+- name: LanmanServer -- allow null-session access to shares
+  ansible.windows.win_regedit:
+    path: HKLM:\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters
+    name: RestrictNullSessAccess
+    data: 0
+    type: dword
+
+- name: LanmanServer -- expose IT$ as a null-session share
+  ansible.windows.win_regedit:
+    path: HKLM:\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters
+    name: NullSessionShares
+    data:
+      - "{{ charlie_it_share_name }}"
+    type: multistring
+
+# =============================================================================
+# IT$ share -- Everyone/anonymous READ (M2.1/M2.2)
+# =============================================================================
+- name: NTFS -- grant Everyone read on the IT folder
+  ansible.windows.win_acl:
+    path: "{{ charlie_it_share_path }}"
+    user: Everyone
+    rights: ReadAndExecute,ListDirectory,Read
+    type: allow
+    state: present
+    inherit: ContainerInherit, ObjectInherit
+    propagation: 'None'
+
+- name: NTFS -- grant ANONYMOUS LOGON read on the IT folder
+  ansible.windows.win_acl:
+    path: "{{ charlie_it_share_path }}"
+    user: ANONYMOUS LOGON
+    rights: ReadAndExecute,ListDirectory,Read
+    type: allow
+    state: present
+    inherit: ContainerInherit, ObjectInherit
+    propagation: 'None'
+
+- name: Create the IT$ share (Everyone + Guests read)
+  ansible.windows.win_share:
+    name: "{{ charlie_it_share_name }}"
+    path: "{{ charlie_it_share_path }}"
+    description: "IT installers & field-tech resources (anonymous)"
+    read: "Everyone,Guests"
+    list: true      # allow the share to be enumerated in a null session
+
+# =============================================================================
+# Backups share -- Domain Users READ (M4.4)
+# =============================================================================
+- name: NTFS -- grant Domain Users read on the Backups folder
+  ansible.windows.win_acl:
+    path: "{{ charlie_backups_share_path }}"
+    user: "{{ charlie_netbios }}\\Domain Users"
+    rights: ReadAndExecute,ListDirectory,Read
+    type: allow
+    state: present
+    inherit: ContainerInherit, ObjectInherit
+    propagation: 'None'
+
+- name: Create the Backups share (Domain Users read)
+  ansible.windows.win_share:
+    name: "{{ charlie_backups_share_name }}"
+    path: "{{ charlie_backups_share_path }}"
+    description: "Nightly config & credential backups"
+    read: "{{ charlie_netbios }}\\Domain Users"
+    list: true
+
+# =============================================================================
+# Plant the loot
+# =============================================================================
+- name: Plant VPN_Setup_Notes.txt on IT$ (leaks users + AS-REP hint / M2.2)
+  ansible.windows.win_template:
+    src: VPN_Setup_Notes.txt.j2
+    dest: "{{ charlie_it_share_path }}\\VPN_Setup_Notes.txt"
+    # win_template writes CRLF by default -> reads cleanly in Notepad.
+
+# --- passwords.kdbx : PRIMARY = ship the prebuilt binary from files/ --------
+- name: Plant prebuilt passwords.kdbx on Backups (rockyou master / M4.4)
+  ansible.windows.win_copy:
+    src: "{{ charlie_kdbx_filename }}"      # roles/charlie_fs_share/files/passwords.kdbx
+    dest: "{{ charlie_backups_share_path }}\\{{ charlie_kdbx_filename }}"
+  when: not (charlie_kdbx_build_on_target | bool)
+
+# --- passwords.kdbx : FALLBACK = rebuild on the host with pykeepass ----------
+- name: Build passwords.kdbx on-target (fallback)
+  when: charlie_kdbx_build_on_target | bool
+  block:
+    - name: Install Python (Chocolatey) for on-target KeePass build
+      chocolatey.chocolatey.win_chocolatey:
+        name: python3
+        state: present
+
+    - name: Install pykeepass
+      ansible.windows.win_command: python -m pip install --disable-pip-version-check pykeepass
+      register: _pip_pykeepass
+      changed_when: "'already satisfied' not in _pip_pykeepass.stdout"
+
+    - name: Stage make_keepass.py on the host
+      ansible.windows.win_copy:
+        src: make_keepass.py
+        dest: 'C:\Windows\Temp\make_keepass.py'
+
+    - name: Generate passwords.kdbx on the host
+      ansible.windows.win_command: >-
+        python C:\Windows\Temp\make_keepass.py
+        --out "{{ charlie_backups_share_path }}\{{ charlie_kdbx_filename }}"
+        --master "{{ charlie_kdbx_master_password }}"
+      args:
+        creates: "{{ charlie_backups_share_path }}\\{{ charlie_kdbx_filename }}"

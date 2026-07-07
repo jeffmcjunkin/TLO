@@ -1,0 +1,17 @@
+---
+oscar_web_site_name: VulnApp
+oscar_web_apppool: VulnAppPool
+oscar_web_port: 8080
+oscar_web_root: 'C:\inetpub\vulnapp'
+
+# DB connection (points at OSCAR-DB with the sysadmin app login, so SQLi reaches xp_cmdshell).
+oscar_web_db_host: OSCAR-DB
+oscar_web_db_name: AppDb
+oscar_web_db_user: appsvc
+oscar_web_db_password: "AppSvc_P@ss1"
+
+# Deliberately STATIC machineKey (training, Milestone 5.1). The attack chain assumes the
+# operator has recovered this key (config disclosure / known-key tooling), then forges ViewState.
+# Static values so the forge is reproducible across deploys.
+oscar_web_validation_key: "8B7A6C5D4E3F2A1B0C9D8E7F6A5B4C3D2E1F0A9B8C7D6E5F4A3B2C1D0E9F8A7B1C2D3E4F5A6B7C8D9E0F1A2B3C4D5E6F708192A3B4C5D6E7F8091A2B3C4D5E6F"
+oscar_web_decryption_key: "34C69D15A2B8E7F00D1C2B3A49586776C5D4E3F2A1B0C9D8E7F6A5B4C3D2E1F0"

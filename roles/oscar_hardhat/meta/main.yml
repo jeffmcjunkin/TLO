@@ -1,0 +1,25 @@
+---
+# oscar_hardhat — TLO training range (oscar.local)
+# Deploys the open-source HardHat C2 project (DragoQCC/HardHatC2) via Docker as the
+# "C2 management service" of Milestone 6/7. Isolated authorized-lab use only.
+dependencies:
+  - role: geerlingguy.docker
+
+galaxy_info:
+  role_name: oscar_hardhat
+  author: TLO range
+  description: >
+    Install the open-source HardHat C2 framework via docker compose for the TLO
+    security-training range. The web/API login is gated by the Milestone-6 reverse-
+    engineering puzzle. Authorized isolated-lab use only.
+  company: The Last Ones range
+  license: GPL-3.0-or-later
+  min_ansible_version: "2.14"
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm
+  galaxy_tags:
+    - ludus
+    - c2
+    - security_lab

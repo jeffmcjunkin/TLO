@@ -1,0 +1,56 @@
+---
+# =====================================================================
+# alpha_ad_content — create alpha.local accounts on DC1-ALPHA (primary-dc)
+# Milestone context: M7/M8 — svc_build is the CI build-agent identity; making it
+#   a Domain Admin is the poisoned-pipeline payoff (M8.1 -> Domain Admin).
+# Refs:
+#   OWASP CICD-SEC-5 (Insufficient PBAC): https://owasp.org/www-project-top-10-ci-cd-security-risks/CICD-SEC-05
+#   microsoft.ad.user:  https://docs.ansible.com/ansible/latest/collections/microsoft/ad/user_module.html
+#   microsoft.ad.group: https://docs.ansible.com/ansible/latest/collections/microsoft/ad/group_module.html
+# The module runs on the DC over WinRM as the domain admin (Ludus connection user),
+# so no explicit domain_username/domain_password is required.
+# =====================================================================
+
+- name: Create svc_mssql service account
+  microsoft.ad.user:
+    name: "{{ alpha_svc_mssql_user }}"
+    password: "{{ alpha_svc_mssql_password }}"
+    password_never_expires: true
+    update_password: on_create          # idempotent: don't reset the pw every run
+    path: "{{ alpha_ad_users_ou }}"
+    description: "MSSQL service account (ALPHA)"
+    state: present
+
+- name: Create devuser (ALPHA-WKS interactive / autologon user)
+  microsoft.ad.user:
+    name: "{{ alpha_devuser_user }}"
+    password: "{{ alpha_devuser_password }}"
+    password_never_expires: true
+    update_password: on_create
+    path: "{{ alpha_ad_users_ou }}"
+    description: "Developer workstation user"
+    state: present
+
+# svc_build is the TeamCity build-agent identity. Creating it here (rather than
+# relying on ludus_bulk_ad_content) makes this role the single owner of the account.
+- name: Create svc_build (TeamCity build-agent service account)
+  microsoft.ad.user:
+    name: "{{ alpha_svc_build_user }}"
+    password: "{{ alpha_svc_build_password }}"
+    password_never_expires: true
+    update_password: on_create
+    path: "{{ alpha_ad_users_ou }}"
+    # The description doubles as an in-range hint for defenders/players.
+    description: "TeamCity build agent service account (OVER-PRIVILEGED - OWASP CICD-SEC-5)"
+    state: present
+
+# THE intentional misconfiguration: a build-agent service account in Domain Admins.
+- name: Add svc_build to Domain Admins (poisoned-pipeline payoff -> M8 DA)
+  microsoft.ad.group:
+    name: "Domain Admins"
+    scope: global
+    members:
+      add:
+        - "{{ alpha_svc_build_user }}"
+    state: present
+  when: alpha_svc_build_in_domain_admins | bool

@@ -1,0 +1,22 @@
+---
+dependencies: []
+
+galaxy_info:
+  role_name: alpha_sql_seed
+  author: TLO range team
+  description: >-
+    Seeds ALPHA-SECRETS (after badsectorlabs.ludus_mssql) with SecretsDb, crown-jewel
+    tables (Payroll / CustomerSecrets with SSN/CC/salary/ApiKey) and NESTED intentionally
+    vulnerable stored procedures implementing Milestone 9 layered SQLi (9.1 SQLi, 9.2
+    EXEC dynamic concat, 9.3 CALL/nested injection, 9.4 UNION). Plants the "database
+    management script" (C:\Scripts\db_management.ps1) the Domain Admin finds. LAB ONLY.
+  company: TLO
+  license: MIT
+  min_ansible_version: "2.14"
+  platforms:
+    - name: Windows
+      versions:
+        - "2022"
+
+collections:
+  - ansible.windows

@@ -1,0 +1,29 @@
+# {{ ansible_managed }}
+# TLO CorpVPN client profile — download from the portal, then: openvpn client.ovpn
+# Remote resolves range-wide via the Ludus dns_rewrite for vpn.tlo-corp.com.
+# Direct-IP fallback (if DNS is unavailable): remote {{ tlo_portal_ip }} {{ vpn_port }}
+client
+dev {{ vpn_dev }}
+proto {{ vpn_proto }}
+remote {{ vpn_remote_host }} {{ vpn_port }}
+resolv-retry infinite
+nobind
+persist-key
+persist-tun
+remote-cert-tls server
+cipher AES-256-GCM
+auth SHA256
+verb 3
+
+<ca>
+{{ ovpn_ca_cert }}
+</ca>
+<cert>
+{{ ovpn_client_cert }}
+</cert>
+<key>
+{{ ovpn_client_key }}
+</key>
+<tls-crypt>
+{{ ovpn_tls_crypt }}
+</tls-crypt>

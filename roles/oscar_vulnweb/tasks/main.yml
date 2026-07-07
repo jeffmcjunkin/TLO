@@ -1,0 +1,63 @@
+---
+# Runs on OSCAR-WEB. Installs IIS + ASP.NET and deploys the training app as a "Web Site"
+# (source-only; IIS compiles .aspx on first request, so no MSBuild is needed). Idempotent.
+
+- name: Install IIS + ASP.NET 4.5 features
+  ansible.windows.win_feature:
+    name:
+      - Web-Server
+      - Web-Asp-Net45
+      - Web-Net-Ext45
+      - Web-ISAPI-Ext
+      - Web-ISAPI-Filter
+      - Web-Mgmt-Console
+      - NET-Framework-45-ASPNET
+    state: present
+    include_management_tools: true
+
+- name: Create the application root
+  ansible.windows.win_file:
+    path: "{{ oscar_web_root }}"
+    state: directory
+
+- name: Deploy the training app pages
+  ansible.windows.win_copy:
+    src: "{{ item }}"
+    dest: "{{ oscar_web_root }}\\{{ item }}"
+  loop:
+    - Default.aspx
+    - Search.aspx
+
+- name: Deploy web.config (static machineKey + connection string)
+  ansible.windows.win_template:
+    src: web.config.j2
+    dest: "{{ oscar_web_root }}\\web.config"
+
+- name: Create the app pool (.NET v4.0, Integrated)
+  microsoft.iis.web_app_pool:
+    name: "{{ oscar_web_apppool }}"
+    state: started
+    attributes:
+      managedRuntimeVersion: v4.0
+      managedPipelineMode: Integrated
+
+- name: Create the IIS site bound on the training port
+  microsoft.iis.website:
+    name: "{{ oscar_web_site_name }}"
+    state: started
+    physical_path: "{{ oscar_web_root }}"
+    application_pool: "{{ oscar_web_apppool }}"
+    bindings:
+      add:
+        - protocol: http
+          binding_information: "*:{{ oscar_web_port }}:"
+
+- name: Open the firewall for the training web port
+  community.windows.win_firewall_rule:
+    name: "TLO VulnApp {{ oscar_web_port }}"
+    localport: "{{ oscar_web_port }}"
+    action: allow
+    direction: in
+    protocol: tcp
+    state: present
+    enabled: true

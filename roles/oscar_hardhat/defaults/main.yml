@@ -1,0 +1,14 @@
+---
+# Pin a known-good ref (verify against upstream at deploy; upstream can drift).
+hardhat_repo: "https://github.com/DragoQCC/HardHatC2.git"
+hardhat_version: "V0.3.03-Alpha"
+hardhat_dir: /opt/hardhatc2
+
+# First-run admin. MUST equal the plaintext recovered in Milestone 6 (see oscar_re_service:
+# oscar_c2_admin_user / oscar_c2_admin_password). Keep these two roles in sync.
+hardhat_admin_user: "HardHat_Admin"
+hardhat_admin_password: "H@rdHat_C2_Admin!2026"
+
+# Ports: TeamServer (implant/API) and the Blazor operator UI.
+hardhat_teamserver_port: 5000
+hardhat_ui_port: 7096

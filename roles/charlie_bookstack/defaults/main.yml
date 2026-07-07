@@ -1,0 +1,56 @@
+---
+# =============================================================================
+# charlie_bookstack defaults
+# =============================================================================
+charlie_bookstack_dir: /opt/bookstack
+charlie_bookstack_fqdn: wiki.charlie.local
+charlie_bookstack_http_port: 80
+charlie_bookstack_url: "http://{{ charlie_bookstack_fqdn }}"
+
+# API calls / readiness checks hit the host loopback (works before range DNS is
+# fully wired); the Host header carries the app FQDN.
+charlie_bookstack_api_base: "http://127.0.0.1:{{ charlie_bookstack_http_port }}"
+
+# --- container images -------------------------------------------------------
+charlie_bookstack_image: "lscr.io/linuxserver/bookstack:latest"
+charlie_bookstack_db_image: "lscr.io/linuxserver/mariadb:latest"
+charlie_bookstack_name: charlie_bookstack
+charlie_bookstack_db_name_container: charlie_bookstack_db
+
+# --- database ---------------------------------------------------------------
+charlie_bookstack_db_database: bookstackapp
+charlie_bookstack_db_user: bookstack
+charlie_bookstack_db_password: "Bookstack_DB_2026!"
+charlie_bookstack_db_root_password: "Bookstack_DBRoot_2026!"
+
+# --- THE VULN : disable HTML/JS sanitization (stored XSS) -------------------
+# Verified against BookStack's .env.example.complete: the exact variable is
+# ALLOW_CONTENT_SCRIPTS (NOT APP_ALLOW_CONTENT_SCRIPTS). It is deprecated in
+# favour of APP_CONTENT_FILTERING='' (no filtering); setting ALLOW_CONTENT_SCRIPTS
+# =true is documented as equivalent. We set BOTH for cross-version safety.
+charlie_bookstack_allow_content_scripts: true
+
+# --- default admin (linuxserver seeds admin@admin.com / "password") ---------
+charlie_bookstack_admin_email: "admin@admin.com"
+charlie_bookstack_admin_password: "BookStackAdmin_2026!"
+
+# --- API token minted for programmatic seeding (any length works; the secret
+#     is stored bcrypt-hashed in the DB, sent back as `Token id:secret`). ------
+charlie_bookstack_api_token_id: "tlocharlieseedtokenid0000000000ab"
+charlie_bookstack_api_token_secret: "tlocharlieseedtokensecret00000000cd"
+charlie_bookstack_api_token_name: "tlo-seed"
+
+# --- wiki editor account (M3.2 chain) ---------------------------------------
+# IMPORTANT: charlie_wiki_editor_user / _password MUST MATCH the values seeded
+# into reuben's Chrome vault by the charlie_chrome_creds role, or the M3.2 ->
+# M4.1 chain (dumped Chrome cred -> wiki login) breaks. Defaults are identical
+# in both roles.
+charlie_wiki_editor_user: reuben
+charlie_wiki_editor_email: "reuben@charlie.local"
+charlie_wiki_editor_password: "Reuben.Wiki.2025!"
+
+# --- seeded content (URL the GHOSTS victim browses in M4.2) -----------------
+#   http://wiki.charlie.local/books/it/page/vpn-runbook
+charlie_bookstack_book_name: "IT"
+charlie_bookstack_book_desc: "IT department runbooks and how-tos."
+charlie_bookstack_page_name: "VPN Runbook"

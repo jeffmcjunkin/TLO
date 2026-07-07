@@ -1,0 +1,47 @@
+---
+# =============================================================================
+# tlo_external_dns — defaults
+# =============================================================================
+
+# Authoritative zone.
+dns_zone: "tlo-corp.com"
+
+# SOA / zone knobs. Bump dns_soa_serial if you edit records after first deploy.
+dns_soa_serial: "2026070601"
+dns_soa_refresh: "3600"
+dns_soa_retry: "600"
+dns_soa_expire: "604800"
+dns_soa_minimum: "3600"
+dns_ttl: "3600"
+dns_ns_name: "ns1"                 # ns1.tlo-corp.com -> this host
+dns_hostmaster: "hostmaster.tlo-corp.com."
+
+# Recursive forwarding for everything outside the zone.
+dns_forwarders:
+  - "1.1.1.1"
+  - "1.0.0.1"
+
+# The last octet of the VPN portal on VLAN 20 (built into vpn/www A records).
+dns_portal_last_octet: 10
+
+# A records. `octets` is "<vlan>.<host>" and is expanded to 10.<R>.<octets> at
+# render time (R derived from this host's own address). The 30.x entries are
+# internal CHARLIE hosts that should NEVER appear in external DNS — they are the
+# juicy payoff of the intentional AXFR leak.
+tlo_dns_a_records:
+  - { name: "vpn",        octets: "20.10", comment: "CorpVPN portal (external, real target)" }
+  - { name: "www",       octets: "20.10", comment: "corporate website (decoy -> portal)" }
+  - { name: "mail",       octets: "20.20", comment: "mail relay (decoy)" }
+  - { name: "vpn-legacy", octets: "20.10", comment: "LEAK: decommissioned vpn head" }
+  - { name: "dc01",       octets: "30.10", comment: "LEAK: internal CHARLIE DC" }
+  - { name: "fileserver", octets: "30.20", comment: "LEAK: internal CHARLIE file server" }
+  - { name: "wiki",       octets: "30.21", comment: "LEAK: internal CHARLIE wiki" }
+
+# Extra literal records (verbatim right-hand side) appended to the zone.
+# Example: - { name: "_dmarc", type: "TXT", value: "\"v=DMARC1; p=none\"" }
+tlo_dns_extra_records: []
+
+dns_packages:
+  - bind9
+  - bind9-utils
+  - bind9-dnsutils

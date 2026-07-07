@@ -1,0 +1,23 @@
+---
+# oscar_appdb — TLO training range (oscar.local)
+# Creates the application database the deliberately-vulnerable web app queries in
+# Milestone 5. Isolated lab use only.
+dependencies: []
+
+galaxy_info:
+  role_name: oscar_appdb
+  author: TLO range
+  description: >
+    Create the AppDb schema + seed data on OSCAR-DB for the TLO security-training range.
+    Runs after badsectorlabs.ludus_mssql. Authorized isolated-lab use only.
+  company: The Last Ones range
+  license: GPL-3.0-or-later
+  min_ansible_version: "2.14"
+  platforms:
+    - name: Windows
+      versions:
+        - "2022"
+  galaxy_tags:
+    - ludus
+    - mssql
+    - security_lab

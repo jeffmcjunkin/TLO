@@ -1,0 +1,23 @@
+---
+dependencies: []
+
+galaxy_info:
+  role_name: alpha_ad_content
+  author: TLO range team
+  description: >-
+    Owns alpha.local AD account creation for "The Last Ones" range (M7-M9). Creates
+    svc_build (TeamCity build-agent service account, ADDED to Domain Admins), svc_mssql,
+    and devuser. Intentionally over-privileges svc_build (OWASP CICD-SEC-5) so that the
+    M8 poisoned-pipeline yields Domain Admin. Runs on DC1-ALPHA (primary-dc).
+  company: TLO
+  license: MIT
+  min_ansible_version: "2.14"
+  platforms:
+    - name: Windows
+      versions:
+        - "2022"
+
+# Collections used (install with `ludus ansible collection add ...` if not global):
+collections:
+  - microsoft.ad
+  - ansible.windows

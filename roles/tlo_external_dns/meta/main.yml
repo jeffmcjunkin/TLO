@@ -1,0 +1,30 @@
+---
+# TLO custom role — tlo_external_dns  (bind9 authoritative + AXFR leak)
+# Debian 12, VLAN 20 (External DMZ).
+dependencies: []
+
+galaxy_info:
+  role_name: tlo_external_dns
+  author: TLO range team
+  description: >-
+    Authoritative bind9 for tlo-corp.com on the External DMZ. Publishes
+    vpn.tlo-corp.com -> the VPN portal (10.<R>.20.10) plus www/mail decoys, and
+    intentionally allows zone transfer to anyone (allow-transfer { any; }) so the
+    full zone — including internal-only breadcrumb records — leaks via AXFR (M1
+    recon). Everything else is forwarded to 1.1.1.1. <R> is derived at runtime.
+  company: TLO
+  license: MIT
+  min_ansible_version: "2.14"
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm
+  galaxy_tags:
+    - bind9
+    - dns
+    - ludus
+    - security_lab
+    - recon
+
+collections:
+  - ansible.builtin

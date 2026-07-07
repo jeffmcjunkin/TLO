@@ -1,0 +1,54 @@
+---
+# =====================================================================
+# alpha_gitlab_seed — defaults
+# Runs on alpha-gitlab (Debian 12) AFTER geerlingguy.gitlab has installed GitLab CE.
+# Milestones: 7.3 (git-history secret) and 7.5 (masked CI/CD vars + .gitlab-ci.yml).
+# =====================================================================
+
+alpha_gitlab_external_url: "http://gitlab.alpha.local"
+# API + git push happen on-box against the loopback, so DNS/routing to the FQDN
+# is not required for seeding to succeed.
+alpha_gitlab_local_url: "http://127.0.0.1"
+alpha_gitlab_root_password: "Root.GitLab.2025!"   # known root password (lab)
+
+# ---- SHARED SECRET: deterministic PAT (glpat- + exactly 20 chars) ----
+# Must equal `alpha_gitlab_pat` in alpha_wks_seed (leaked in PSReadline history)
+# AND the value hardcoded-then-removed in the crafted git history below. Only
+# `gitlab-rails runner ... set_token` can force a specific token value.
+alpha_gitlab_pat: "glpat-TLOtoken0123456789ab"
+alpha_gitlab_pat_name: "ci-bootstrap"
+
+# ---- Group / project ----
+alpha_gitlab_group: "alpha"
+alpha_gitlab_project: "payment-service"
+
+# ---- Secret that survives ONLY in git history (added, then "removed") ----
+alpha_prod_db_password: "Wint3r2024_ProdDb!"      # config/database.yml prod password
+alpha_prod_db_host: "ALPHA-SECRETS"
+alpha_prod_db_name: "SecretsDb"
+alpha_prod_db_user: "appuser"
+
+# ---- Masked CI/CD project variables (M7.5) ----
+# NOTE (GitLab masking constraint): a *masked* variable value must be a single line,
+# >= 8 chars, and match  [a-zA-Z0-9_+=/@:.~-]  only (no '!', spaces, or newlines) or
+# GitLab refuses to mask it. The values below are deliberately masking-safe. Masking
+# is a LOG-SCRUB only — the plaintext is still live in the job environment, which is
+# the whole point of M7.5 (attacker edits .gitlab-ci.yml to `echo $VAR | base64`).
+alpha_gitlab_ci_variables:
+  - key: "PROD_DB_PASSWORD"
+    value: "Wint3r2024_ProdDb"
+  - key: "AWS_SECRET_KEY"
+    value: "wJalrXUtnFEMIKQ7MDENGbPxRfiCYEXAMPLEKEY"
+  - key: "DEPLOY_SSH_KEY"
+    value: "c3NoLWVkMjU1MTkAAAAGVExPX2xhYl9kZXBsb3lfa2V5X0VYQU1QTEU="
+
+# Where the crafted repo is assembled before it is pushed.
+alpha_gitlab_build_dir: "/tmp/alpha_payment_service_build"
+
+# Seed method for group/project/variables:
+#   'api'     (default) — robust: ansible.builtin.uri against the on-box REST API
+#                         using the deterministic PAT. No controller-side deps.
+#   'modules'           — spec-named community.general.gitlab_* modules. These run
+#                         on the Ansible controller (the Ludus server) and REQUIRE
+#                         `python-gitlab` there. See tasks/seed_via_modules.yml.
+alpha_gitlab_seed_method: "api"

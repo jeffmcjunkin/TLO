@@ -1,0 +1,22 @@
+---
+dependencies: []
+
+galaxy_info:
+  role_name: alpha_teamcity
+  author: TLO range team
+  description: >-
+    Installs a TeamCity server + build agent on XY1-ALPHA (Win2022, VS2022 present).
+    The build agent service logs on as alpha\svc_build (Domain Admin), so building the
+    poisoned C# project (shipped in files/) escalates to Domain Admin via a signed
+    MSBuild PostBuild step (M8.1 — OWASP CICD-SEC-4 / MITRE T1127.001).
+  company: TLO
+  license: MIT
+  min_ansible_version: "2.14"
+  platforms:
+    - name: Windows
+      versions:
+        - "2022"
+
+collections:
+  - ansible.windows
+  - community.windows

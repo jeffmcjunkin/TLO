@@ -1,0 +1,166 @@
+---
+# =============================================================================
+# tlo_attacker_tools — Kali operator box (VLAN 10) offensive tooling
+# =============================================================================
+# Idempotent. apt for the OS-packaged tools, pipx for pinned pypi tools staged
+# globally, get_url for release binaries that are not apt-able.
+# Kali template already ships most of these; this role makes the set explicit,
+# repeatable, and re-runnable.
+
+- name: Gather facts
+  ansible.builtin.setup:
+
+# ---------------------------------------------------------------------------
+# APT — required (fatal on failure)
+# ---------------------------------------------------------------------------
+- name: Update apt cache
+  become: true
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+  when: tlo_apt_update_cache | bool
+
+- name: Install required offensive packages (latest / present)
+  become: true
+  ansible.builtin.apt:
+    name: "{{ tlo_apt_packages_required | difference(tlo_apt_pin_versions.keys() | list) }}"
+    state: present
+
+- name: Install version-pinned packages
+  become: true
+  ansible.builtin.apt:
+    name: "{{ item.key }}={{ item.value }}"
+    state: present
+    allow_downgrade: true
+  loop: "{{ tlo_apt_pin_versions | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}={{ item.value }}"
+
+# ---------------------------------------------------------------------------
+# APT — optional / best-effort (never fatal; /opt fallbacks cover the gaps)
+# ---------------------------------------------------------------------------
+- name: Install optional packages (best effort)
+  become: true
+  ansible.builtin.apt:
+    name: "{{ item }}"
+    state: present
+  loop: "{{ tlo_apt_packages_optional }}"
+  register: tlo_optional_apt
+  failed_when: false
+  changed_when: tlo_optional_apt.changed | default(false)
+
+- name: Report optional packages that could not be installed
+  ansible.builtin.debug:
+    msg: >-
+      Optional package '{{ item.item }}' not installed from apt
+      (a /opt release fallback is staged for ligolo-ng/chisel).
+  loop: "{{ tlo_optional_apt.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when: item.failed | default(false)
+
+# ---------------------------------------------------------------------------
+# pipx — pinned pypi tools, installed globally so every user/shell sees them
+# ---------------------------------------------------------------------------
+- name: Install pipx-managed tools globally
+  become: true
+  community.general.pipx:
+    name: "{{ item }}"
+    state: install
+  environment:
+    PIPX_HOME: "{{ tlo_pipx_home }}"
+    PIPX_BIN_DIR: "{{ tlo_pipx_bin_dir }}"
+  loop: "{{ tlo_pipx_packages }}"
+  register: tlo_pipx_result
+  failed_when: false
+
+- name: Report pipx tools that could not be installed
+  ansible.builtin.debug:
+    msg: "pipx tool '{{ item.item }}' failed to install: {{ item.msg | default('see logs') }}"
+  loop: "{{ tlo_pipx_result.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when: item.failed | default(false)
+
+# ---------------------------------------------------------------------------
+# Release binaries -> /opt/tools
+# ---------------------------------------------------------------------------
+- name: Ensure /opt/tools tree exists
+  become: true
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ tlo_tools_dir }}"
+    - "{{ tlo_tools_dir }}/windows"
+    - "{{ tlo_tools_dir }}/linux"
+
+# --- Archives (download + unpack) ---
+- name: Ensure archive destination directories exist
+  become: true
+  ansible.builtin.file:
+    path: "{{ item.dest_dir }}"
+    state: directory
+    mode: "0755"
+  loop: "{{ tlo_release_archives }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Download release archives
+  become: true
+  ansible.builtin.get_url:
+    url: "{{ item.url }}"
+    dest: "{{ item.dest_dir }}/{{ item.url | basename }}"
+    checksum: "{{ item.checksum | default(omit) }}"
+    mode: "0644"
+    timeout: 60
+  loop: "{{ tlo_release_archives }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: tlo_archive_dl
+  retries: 2
+  delay: 5
+  until: tlo_archive_dl is succeeded
+  # Non-fatal: internet may be flaky. Re-run the role to pick up any misses.
+  ignore_errors: true
+
+- name: Unpack release archives (idempotent via creates marker)
+  become: true
+  ansible.builtin.unarchive:
+    src: "{{ item.dest_dir }}/{{ item.url | basename }}"
+    dest: "{{ item.dest_dir }}"
+    remote_src: true
+    creates: "{{ item.unpacked_marker }}"
+  loop: "{{ tlo_release_archives }}"
+  loop_control:
+    label: "{{ item.name }}"
+  failed_when: false
+
+# --- Single-file binaries ---
+- name: Download single-file release binaries
+  become: true
+  ansible.builtin.get_url:
+    url: "{{ item.url }}"
+    dest: "{{ item.dest }}"
+    checksum: "{{ item.checksum | default(omit) }}"
+    mode: "0755"
+    timeout: 60
+  loop: "{{ tlo_release_binaries }}"
+  loop_control:
+    label: "{{ item.name }} -> {{ item.dest }}"
+  register: tlo_bin_dl
+  retries: 2
+  delay: 5
+  until: tlo_bin_dl is succeeded
+  # Non-fatal: internet may be flaky; core apt/pipx tooling is what M1 needs.
+  # Re-run the role to pick up anything that failed here.
+  ignore_errors: true
+
+- name: Summary of staged /opt tooling
+  ansible.builtin.debug:
+    msg:
+      - "Offensive tooling provisioned on {{ inventory_hostname }}."
+      - "apt: {{ tlo_apt_packages_required | join(', ') }}"
+      - "pipx (global -> {{ tlo_pipx_bin_dir }}): {{ tlo_pipx_packages | join(', ') }}"
+      - "Staged binaries under {{ tlo_tools_dir }}/ (ysoserial.net, Rubeus, GodPotato, chisel, ligolo-ng)."

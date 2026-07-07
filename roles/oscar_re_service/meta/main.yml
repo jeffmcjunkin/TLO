@@ -1,0 +1,26 @@
+---
+# oscar_re_service — TLO training range (oscar.local)
+# Plants a benign .NET "crackme" Windows service on OPERATOR-WS1 for the Milestone-6
+# reverse-engineering exercise: it AES-decrypts an embedded string using a key stored under a
+# SYSTEM-only registry ACL. Isolated authorized-lab use only.
+dependencies: []
+
+galaxy_info:
+  role_name: oscar_re_service
+  author: TLO range
+  description: >
+    Plant a benign reverse-engineering training service (.NET, AES + SYSTEM-only key) on
+    OPERATOR-WS1 for the TLO range Milestone 6. Analogous to a CTF crackme. Authorized
+    isolated-lab use only.
+  company: The Last Ones range
+  license: GPL-3.0-or-later
+  min_ansible_version: "2.14"
+  platforms:
+    - name: Windows
+      versions:
+        - "11"
+        - "2022"
+  galaxy_tags:
+    - ludus
+    - reverse_engineering
+    - security_lab

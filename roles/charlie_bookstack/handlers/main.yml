@@ -1,0 +1,6 @@
+---
+- name: Restart bookstack container
+  ansible.builtin.command:
+    cmd: docker compose restart {{ charlie_bookstack_name }}
+    chdir: "{{ charlie_bookstack_dir }}"
+  changed_when: true

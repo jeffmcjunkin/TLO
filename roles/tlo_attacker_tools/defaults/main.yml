@@ -1,0 +1,106 @@
+---
+# =============================================================================
+# tlo_attacker_tools — defaults
+# =============================================================================
+# Every var is defined here with a sane default so the role runs with no role_vars.
+# Override any of these from range-config.yml `role_vars:` if desired.
+
+# ---------------------------------------------------------------------------
+# APT packages
+# ---------------------------------------------------------------------------
+# Core tools that are reliably present in the Kali apt repo. Installed with
+# state=present (or a pinned version, see tlo_apt_pin_versions below). A failure
+# here is fatal — these are load-bearing for the milestones.
+tlo_apt_packages_required:
+  - nmap                # M1 recon / service scan
+  - openvpn             # M1 — connect to the CorpVPN portal .ovpn
+  - proxychains4        # pivoting through ligolo/chisel socks
+  - impacket-scripts    # secretsdump / getTGT / getST / ntlmrelayx.py / smbclient.py ...
+  - python3-impacket    # the impacket library itself
+  - netexec             # nxc (the CrackMapExec successor)
+  - responder           # M4 LLMNR/NBNS poisoning; ships with tools/MultiRelay etc.
+  - john                # provides keepass2john + john the ripper
+  - hashcat             # GPU/CPU hash cracking
+  - dnsutils            # dig (AXFR against the ext-dns leak in M1)
+  - curl                # portal header recon (curl -I)
+  - unzip               # unpack ysoserial.net release zip
+  - p7zip-full          # generic archive handling
+  - python3-pip
+  - pipx                # for pinned pypi tools installed globally
+
+# Best-effort packages: present in current Kali but may be missing on an older
+# template snapshot. Installed one-by-one and never fatal; anything that fails
+# here is covered by the /opt release fallbacks below (ligolo-ng, chisel).
+tlo_apt_packages_optional:
+  - ligolo-ng           # reverse tunnel / pivot (also staged to /opt as fallback)
+  - chisel              # TCP/UDP tunnel over HTTP (also staged to /opt as fallback)
+  - seclists            # wordlists
+  - bloodhound.py       # apt name for bloodhound-python (also installed via pipx)
+
+# Optional exact version pins, e.g. { nmap: "7.94+dfsg1-1", hashcat: "6.2.6-1" }.
+# Any name listed here is installed as "<name>=<version>" instead of latest.
+# Left empty by default because Kali is a rolling distro and hard pins rot fast;
+# set these when you need reproducibility for a specific engagement/snapshot.
+tlo_apt_pin_versions: {}
+
+tlo_apt_update_cache: true
+
+# ---------------------------------------------------------------------------
+# pipx (installed globally to /usr/local/bin so every shell/user sees them)
+# ---------------------------------------------------------------------------
+tlo_pipx_home: /opt/pipx
+tlo_pipx_bin_dir: /usr/local/bin
+tlo_pipx_packages:
+  - bloodhound          # provides the `bloodhound-python` AD collector (legacy/BH-CE compatible)
+
+# ---------------------------------------------------------------------------
+# Release binaries staged to /opt/tools (fetched with get_url — idempotent).
+# These are NOT apt-able. Windows PE files are staged for later use once a
+# Windows foothold exists (M5/M6). Each item may carry an optional `checksum:`
+# ("sha256:...") to pin it; get_url verifies it when present.
+# ---------------------------------------------------------------------------
+tlo_tools_dir: /opt/tools
+
+# Archives: downloaded, then unpacked (creates-guarded on `unpacked_marker`).
+tlo_release_archives:
+  # ysoserial.net — .NET deserialization gadget generator (M5 ViewState RCE).
+  # https://github.com/pwntester/ysoserial.net
+  - name: ysoserial.net
+    url: "https://github.com/pwntester/ysoserial.net/releases/download/v1.36/ysoserial-1.36.zip"
+    dest_dir: "/opt/tools/ysoserial.net"
+    unpacked_marker: "/opt/tools/ysoserial.net/ysoserial.exe"
+    # checksum: "sha256:..."   # optional pin
+
+# Single-file binaries: downloaded straight to `dest`.
+tlo_release_binaries:
+  # Rubeus — Kerberos abuse (AS-REP, S4U, ticket ops) for M2/M5.
+  # GhostPack/Rubeus ships source only; r3motecontrol hosts the community
+  # compiled binaries. This mirror tracks master (rolling) — pin via `checksum`
+  # if you need reproducibility.
+  # https://github.com/GhostPack/Rubeus  |  https://github.com/r3motecontrol/Ghostpack-CompiledBinaries
+  - name: Rubeus.exe
+    url: "https://github.com/r3motecontrol/Ghostpack-CompiledBinaries/raw/master/Rubeus.exe"
+    dest: "/opt/tools/windows/Rubeus.exe"
+
+  # GodPotato — SeImpersonate -> SYSTEM local privesc (M5 on the OSCAR web/db hosts).
+  # https://github.com/BeichenDream/GodPotato  (pinned release V1.20)
+  - name: GodPotato-NET4.exe
+    url: "https://github.com/BeichenDream/GodPotato/releases/download/V1.20/GodPotato-NET4.exe"
+    dest: "/opt/tools/windows/GodPotato-NET4.exe"
+
+  # chisel (Windows) — staged for the Windows-side of the pivot chain.
+  # https://github.com/jpillora/chisel (pinned v1.10.1)
+  - name: chisel_windows_amd64.gz
+    url: "https://github.com/jpillora/chisel/releases/download/v1.10.1/chisel_1.10.1_windows_amd64.gz"
+    dest: "/opt/tools/windows/chisel_windows_amd64.gz"
+
+  # chisel (Linux) — fallback copy in case the apt package was unavailable.
+  - name: chisel_linux_amd64.gz
+    url: "https://github.com/jpillora/chisel/releases/download/v1.10.1/chisel_1.10.1_linux_amd64.gz"
+    dest: "/opt/tools/linux/chisel_linux_amd64.gz"
+
+  # ligolo-ng agent (Windows) — staged for the Windows pivot.
+  # https://github.com/nicocha30/ligolo-ng (pinned v0.7.5)
+  - name: ligolo-ng_agent_windows.zip
+    url: "https://github.com/nicocha30/ligolo-ng/releases/download/v0.7.5/ligolo-ng_agent_0.7.5_windows_amd64.zip"
+    dest: "/opt/tools/windows/ligolo-ng_agent_windows.zip"

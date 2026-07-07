@@ -1,0 +1,46 @@
+---
+# =============================================================================
+# charlie_fs_share defaults
+# =============================================================================
+charlie_fqdn: charlie.local
+
+# --- IT$ share : Everyone/anonymous READ (pairs with the DC anon_share_access
+#     GPO). Attacker enumerates it with `nxc smb FS -u '' -p ''` or
+#     `smbclient -N //FS/IT$` (M2.1) and reads VPN_Setup_Notes.txt (M2.2).
+charlie_it_share_name: "IT$"
+charlie_it_share_path: 'C:\Shares\IT'
+
+# --- Backups share : Domain Users READ. Reachable only after the attacker has
+#     a valid domain credential (post-AS-REP), holding passwords.kdbx (M4.4).
+charlie_backups_share_name: "Backups"
+charlie_backups_share_path: 'C:\Shares\Backups'
+
+# --- planted files ----------------------------------------------------------
+charlie_kdbx_filename: passwords.kdbx
+# Master password baked into files/passwords.kdbx by make_keepass.py. This is
+# documentation only (the binary is prebuilt); to change it, regenerate the
+# .kdbx (see charlie_kdbx_build_on_target below or run make_keepass.py offline).
+charlie_kdbx_master_password: "sunshine1"     # present verbatim in rockyou.txt
+
+# The username list leaked in VPN_Setup_Notes.txt. Keep in sync with the
+# accounts created by charlie_ad_vulns.
+charlie_leaked_usernames:
+  - reuben
+  - svc_helpdesk
+  - helpdesk_admin
+  - webed
+  - Administrator
+# The AS-REP-roastable service account named in the notes' "known issues" hint.
+charlie_asrep_user: svc_helpdesk
+
+# VPN flavor shown in the notes (should match the External VPN product / M1).
+charlie_vpn_product: "OpenVPN"
+charlie_vpn_portal: "vpn.tlo-corp.com"
+charlie_vpn_internal_cidr: "10.30.0.0/24"
+
+# --- optional on-target .kdbx rebuild (FALLBACK) ----------------------------
+# Primary delivery is the prebuilt files/passwords.kdbx (win_copy). If you must
+# rebuild on the host instead (e.g. after editing entries), set this true: the
+# role installs Python via Chocolatey, `pip install pykeepass`, ships
+# make_keepass.py, and runs it on CHARLIE-FS. Requires internet during deploy.
+charlie_kdbx_build_on_target: false

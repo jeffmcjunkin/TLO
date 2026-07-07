@@ -1,0 +1,168 @@
+---
+# =====================================================================
+# alpha_gitlab_seed — M7.3 (git-history secret) + M7.5 (masked CI vars + .gitlab-ci.yml)
+# Runs on alpha-gitlab (Debian 12) AFTER geerlingguy.gitlab installed GitLab CE.
+# Refs:
+#   PAT via gitlab-rails set_token:  https://docs.gitlab.com/security/tokens/
+#   Masked CI/CD variables (log-scrub only): https://docs.gitlab.com/ci/variables/#mask-a-cicd-variable
+#   Secrets in git history / git log -p:     https://owasp.org/www-community/vulnerabilities/Use_of_hard-coded_password
+# =====================================================================
+
+- name: Ensure git + curl are present (omnibus git is not on PATH)
+  ansible.builtin.apt:
+    name:
+      - git
+      - curl
+      - ca-certificates
+    state: present
+    update_cache: true
+
+# GitLab omnibus takes minutes to reconfigure/start; /-/health returns 200 when ready.
+- name: Wait for GitLab to become healthy
+  ansible.builtin.uri:
+    url: "{{ alpha_gitlab_local_url }}/-/health"
+    status_code: 200
+    validate_certs: false
+  register: gl_health
+  retries: 60
+  delay: 10
+  until: gl_health.status is defined and gl_health.status == 200
+
+# ---- root password + DETERMINISTIC PAT (only gitlab-rails can set a specific token) ----
+- name: Template the gitlab-rails seed script (root pw + deterministic PAT)
+  ansible.builtin.template:
+    src: seed_root_and_token.rb.j2
+    dest: /tmp/tlo_seed_root_and_token.rb
+    owner: root
+    mode: "0600"
+
+- name: Run gitlab-rails seed (root pw + deterministic PAT)
+  ansible.builtin.command: gitlab-rails runner /tmp/tlo_seed_root_and_token.rb
+  register: gl_seed
+  changed_when: "'CHANGED' in gl_seed.stdout"
+
+- name: Remove the seed script (contains the token)
+  ansible.builtin.file:
+    path: /tmp/tlo_seed_root_and_token.rb
+    state: absent
+
+# ---- group + project via REST API using the deterministic PAT (robust path) ----
+- name: Seed group / project / masked variables via REST API
+  when: alpha_gitlab_seed_method == 'api'
+  block:
+    - name: Look up group "{{ alpha_gitlab_group }}"
+      ansible.builtin.uri:
+        url: "{{ alpha_gitlab_local_url }}/api/v4/groups/{{ alpha_gitlab_group | urlencode }}"
+        headers:
+          PRIVATE-TOKEN: "{{ alpha_gitlab_pat }}"
+        status_code: [200, 404]
+      register: gl_group_get
+
+    - name: Create group "{{ alpha_gitlab_group }}"
+      ansible.builtin.uri:
+        url: "{{ alpha_gitlab_local_url }}/api/v4/groups"
+        method: POST
+        headers:
+          PRIVATE-TOKEN: "{{ alpha_gitlab_pat }}"
+        body_format: form-urlencoded
+        body:
+          name: "{{ alpha_gitlab_group }}"
+          path: "{{ alpha_gitlab_group }}"
+          visibility: "private"
+        status_code: [201, 409]
+      when: gl_group_get.status == 404
+
+    - name: Resolve group id
+      ansible.builtin.uri:
+        url: "{{ alpha_gitlab_local_url }}/api/v4/groups/{{ alpha_gitlab_group | urlencode }}"
+        headers:
+          PRIVATE-TOKEN: "{{ alpha_gitlab_pat }}"
+      register: gl_group
+
+    - name: Look up project "{{ alpha_gitlab_group }}/{{ alpha_gitlab_project }}"
+      ansible.builtin.uri:
+        url: "{{ alpha_gitlab_local_url }}/api/v4/projects/{{ (alpha_gitlab_group ~ '/' ~ alpha_gitlab_project) | urlencode }}"
+        headers:
+          PRIVATE-TOKEN: "{{ alpha_gitlab_pat }}"
+        status_code: [200, 404]
+      register: gl_project_get
+
+    - name: Create project "{{ alpha_gitlab_project }}"
+      ansible.builtin.uri:
+        url: "{{ alpha_gitlab_local_url }}/api/v4/projects"
+        method: POST
+        headers:
+          PRIVATE-TOKEN: "{{ alpha_gitlab_pat }}"
+        body_format: form-urlencoded
+        body:
+          name: "{{ alpha_gitlab_project }}"
+          namespace_id: "{{ gl_group.json.id }}"
+          visibility: "private"
+          initialize_with_readme: "false"
+        status_code: [201, 409]
+      when: gl_project_get.status == 404
+
+    # ---- crafted git history: secret in a commit, "removed" in a later commit ----
+    - name: Template the offline git-history builder
+      ansible.builtin.template:
+        src: build_history.sh.j2
+        dest: /tmp/tlo_build_history.sh
+        mode: "0700"
+
+    - name: Build + push the crafted git history (M7.3 — survives in git log -p)
+      ansible.builtin.command: /tmp/tlo_build_history.sh
+      register: gl_hist
+      changed_when: true
+
+    - name: Remove the history builder (contains the secrets)
+      ansible.builtin.file:
+        path: /tmp/tlo_build_history.sh
+        state: absent
+
+    # ---- masked CI/CD variables (M7.5) ----
+    - name: Resolve project id
+      ansible.builtin.uri:
+        url: "{{ alpha_gitlab_local_url }}/api/v4/projects/{{ (alpha_gitlab_group ~ '/' ~ alpha_gitlab_project) | urlencode }}"
+        headers:
+          PRIVATE-TOKEN: "{{ alpha_gitlab_pat }}"
+      register: gl_project
+
+    - name: Create masked CI/CD variables (POST; 400 => already exists)
+      ansible.builtin.uri:
+        url: "{{ alpha_gitlab_local_url }}/api/v4/projects/{{ gl_project.json.id }}/variables"
+        method: POST
+        headers:
+          PRIVATE-TOKEN: "{{ alpha_gitlab_pat }}"
+        body_format: form-urlencoded
+        body:
+          key: "{{ item.key }}"
+          value: "{{ item.value }}"
+          masked: "true"
+          protected: "false"
+        status_code: [201, 400]
+      loop: "{{ alpha_gitlab_ci_variables }}"
+      loop_control:
+        label: "{{ item.key }}"
+      register: gl_var_create
+
+    - name: Update masked CI/CD variables that already existed (PUT)
+      ansible.builtin.uri:
+        url: "{{ alpha_gitlab_local_url }}/api/v4/projects/{{ gl_project.json.id }}/variables/{{ item.item.key }}"
+        method: PUT
+        headers:
+          PRIVATE-TOKEN: "{{ alpha_gitlab_pat }}"
+        body_format: form-urlencoded
+        body:
+          value: "{{ item.item.value }}"
+          masked: "true"
+          protected: "false"
+        status_code: [200]
+      loop: "{{ gl_var_create.results }}"
+      loop_control:
+        label: "{{ item.item.key }}"
+      when: item.status is defined and item.status == 400
+
+# ---- spec-named alternative: community.general.gitlab_* (needs python-gitlab) ----
+- name: Seed group / project / masked variables via community.general.gitlab_* modules
+  ansible.builtin.include_tasks: seed_via_modules.yml
+  when: alpha_gitlab_seed_method == 'modules'

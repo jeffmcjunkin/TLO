@@ -1,0 +1,49 @@
+---
+# Runs on OSCAR-DC1 (primary-dc). Owns oscar.local account creation, then wires up
+# Kerberos constrained delegation for the training scenario (Milestone 5.4/5.5).
+# Idempotent + safe to re-run.
+
+- name: Ensure Workstations OU exists (LAPS role targets it)
+  microsoft.ad.ou:
+    name: "{{ oscar_workstations_ou_name }}"
+    path: "{{ oscar_domain_dn }}"
+    state: present
+
+- name: Create the MSSQL service account (also the constrained-delegation principal)
+  microsoft.ad.user:
+    identity: "{{ oscar_svc_mssql_user }}"
+    name: "{{ oscar_svc_mssql_user }}"
+    password: "{{ oscar_svc_mssql_password }}"
+    password_never_expires: true
+    user_cannot_change_password: true
+    state: present
+    # SPN required so the account can be a Kerberos service / KCD source.
+    spn:
+      set:
+        - "{{ oscar_mssql_spn }}"
+
+- name: Create the privileged user impersonated via S4U (Milestone 5.5)
+  microsoft.ad.user:
+    identity: "{{ oscar_privileged_user }}"
+    name: "{{ oscar_privileged_user }}"
+    password: "{{ oscar_privileged_password }}"
+    password_never_expires: true
+    state: present
+    groups:
+      add:
+        - Domain Admins
+
+- name: Configure constrained delegation with protocol transition on svc_mssql
+  # msDS-AllowedToDelegateTo has no dedicated microsoft.ad module option, and
+  # TrustedToAuthForDelegation (protocol transition / S4U2Self) is a UAC flag, so set both via AD cmdlets.
+  ansible.windows.win_powershell:
+    script: |
+      $u = Get-ADUser -Identity "{{ oscar_svc_mssql_user }}" -Properties 'msDS-AllowedToDelegateTo'
+      $target = "{{ oscar_kcd_allowed_spn }}"
+      $current = @($u.'msDS-AllowedToDelegateTo')
+      if ($current -notcontains $target) {
+        Set-ADUser -Identity "{{ oscar_svc_mssql_user }}" -Add @{'msDS-AllowedToDelegateTo'=$target}
+        $Ansible.Changed = $true
+      } else { $Ansible.Changed = $false }
+      # Protocol transition (S4U2Self) — TRUSTED_TO_AUTH_FOR_DELEGATION
+      Set-ADAccountControl -Identity "{{ oscar_svc_mssql_user }}" -TrustedToAuthForDelegation $true

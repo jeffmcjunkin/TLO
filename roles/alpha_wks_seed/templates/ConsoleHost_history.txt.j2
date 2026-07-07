@@ -1,0 +1,17 @@
+Get-ChildItem Env:
+cd C:\Projects
+git clone https://oauth2:{{ alpha_gitlab_pat }}@{{ alpha_gitlab_host }}/{{ alpha_gitlab_group }}/{{ alpha_gitlab_project }}.git
+cd {{ alpha_gitlab_project }}
+git log --oneline -8
+git log -p config/database.yml | Select-String -Pattern 'password|token' | Select-Object -First 20
+msbuild PaymentService.csproj /p:Configuration=Release
+# quick data sanity check against the payroll db before the release
+sqlcmd -S {{ alpha_wks_mssql_host }} -U {{ alpha_wks_mssql_user }} -P '{{ alpha_wks_mssql_password }}' -Q "SELECT TOP 5 Name, Salary FROM SecretsDb.dbo.Payroll"
+Get-Content .\config\database.yml | Select-String password
+# map the build box so the CI agent can pick up the artifact
+net use \\{{ alpha_wks_teamcity_host }}\c$ /user:alpha\{{ alpha_svc_build_user }} {{ alpha_svc_build_password }}
+Copy-Item .\bin\Release\PaymentService.exe \\{{ alpha_wks_teamcity_host }}\c$\Projects\payment-service\ -Force
+net use \\{{ alpha_wks_teamcity_host }}\c$ /delete
+Remove-Item Env:GIT_ASKPASS -ErrorAction SilentlyContinue
+cls
+exit

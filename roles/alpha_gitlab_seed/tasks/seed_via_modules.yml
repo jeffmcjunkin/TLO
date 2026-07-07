@@ -1,0 +1,72 @@
+---
+# =====================================================================
+# ALTERNATIVE seed path — the spec-named community.general.gitlab_* modules.
+# Enable with role_var:  alpha_gitlab_seed_method: modules
+#
+# HONEST FLAG: these modules import python-gitlab and run on the Ansible CONTROLLER
+# (the Ludus server), NOT on the target. They therefore require:
+#     pip install python-gitlab            # on the Ludus server
+# and network reachability from the controller to {{ alpha_gitlab_external_url }}.
+# The default 'api' method (tasks/main.yml) avoids both requirements, which is why
+# it is the default. Kept here because the spec explicitly calls for gitlab_* /
+# gitlab_project_variable(masked:true).
+# Module docs:
+#   https://docs.ansible.com/ansible/latest/collections/community/general/gitlab_group_module.html
+#   https://docs.ansible.com/ansible/latest/collections/community/general/gitlab_project_module.html
+#   https://docs.ansible.com/ansible/latest/collections/community/general/gitlab_project_variable_module.html
+# =====================================================================
+
+- name: (module) Create group "{{ alpha_gitlab_group }}"
+  community.general.gitlab_group:
+    api_url: "{{ alpha_gitlab_external_url }}"
+    api_token: "{{ alpha_gitlab_pat }}"
+    name: "{{ alpha_gitlab_group }}"
+    path: "{{ alpha_gitlab_group }}"
+    visibility: private
+    state: present
+  delegate_to: localhost
+
+- name: (module) Create project "{{ alpha_gitlab_project }}"
+  community.general.gitlab_project:
+    api_url: "{{ alpha_gitlab_external_url }}"
+    api_token: "{{ alpha_gitlab_pat }}"
+    name: "{{ alpha_gitlab_project }}"
+    group: "{{ alpha_gitlab_group }}"
+    visibility: private
+    initialize_with_readme: false
+    state: present
+  delegate_to: localhost
+
+# The crafted history push is git/HTTP, not a module — run it on the target regardless.
+- name: Template the offline git-history builder
+  ansible.builtin.template:
+    src: build_history.sh.j2
+    dest: /tmp/tlo_build_history.sh
+    mode: "0700"
+
+- name: Build + push the crafted git history (M7.3 — survives in git log -p)
+  ansible.builtin.command: /tmp/tlo_build_history.sh
+  changed_when: true
+
+- name: Remove the history builder (contains the secrets)
+  ansible.builtin.file:
+    path: /tmp/tlo_build_history.sh
+    state: absent
+
+- name: (module) Add masked CI/CD variables (M7.5)
+  community.general.gitlab_project_variable:
+    api_url: "{{ alpha_gitlab_external_url }}"
+    api_token: "{{ alpha_gitlab_pat }}"
+    project: "{{ alpha_gitlab_group }}/{{ alpha_gitlab_project }}"
+    purge: false
+    variables:
+      - name: "{{ item.key }}"
+        value: "{{ item.value }}"
+        masked: true
+        protected: false
+        variable_type: env_var
+    state: present
+  loop: "{{ alpha_gitlab_ci_variables }}"
+  loop_control:
+    label: "{{ item.key }}"
+  delegate_to: localhost

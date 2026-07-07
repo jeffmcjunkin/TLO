@@ -1,0 +1,42 @@
+========================================================================
+ CHARLIE.LOCAL  --  Remote Access / VPN Setup Notes   (IT dept, INTERNAL)
+========================================================================
+ Product : {{ charlie_vpn_product }}
+ Portal  : https://{{ charlie_vpn_portal }}/
+ Once connected you land on the corporate LAN ({{ charlie_vpn_internal_cidr }}).
+
+ Internal DNS suffix : {{ charlie_fqdn }}
+ Domain controller   : CHARLIE-DC1.{{ charlie_fqdn }}
+ File server (this)  : CHARLIE-FS.{{ charlie_fqdn }}
+ IT wiki             : http://wiki.{{ charlie_fqdn }}/  (runbooks, how-tos)
+
+------------------------------------------------------------------------
+ Standard account naming (for helpdesk tickets)
+------------------------------------------------------------------------
+ We provision everyone as first-name logins. Current directory accounts:
+
+{% for u in charlie_leaked_usernames %}
+   {{ "%-18s"|format(u) }} {{ charlie_fqdn }}\{{ u }}
+{% endfor %}
+
+ New starters: raise a ticket with the helpdesk to have an account cut.
+
+------------------------------------------------------------------------
+ KNOWN ISSUES / TECH DEBT  (please help us close these out!)
+------------------------------------------------------------------------
+ * The legacy helpdesk automation account "{{ charlie_asrep_user }}" still has
+   "Do not require Kerberos preauthentication" turned on -- it was needed for
+   an old ticketing integration that has since been retired. IT keeps meaning
+   to re-enable preauth on {{ charlie_fqdn }}\{{ charlie_asrep_user }} but it
+   keeps slipping. Low priority.
+
+ * Password vault: the master KeePass file for shared/service logins lives on
+   the Backups share (\\CHARLIE-FS\Backups\passwords.kdbx). Domain users can
+   read it. We really should move that somewhere with tighter ACLs.
+
+ * The IT$ share is currently world-readable (guest/anonymous) so field techs
+   can grab installers without signing in. Do NOT put anything sensitive here.
+
+------------------------------------------------------------------------
+ Support: helpdesk@{{ charlie_fqdn }}   x4357
+========================================================================

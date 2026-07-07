@@ -1,0 +1,58 @@
+---
+# =============================================================================
+# tlo_vpn_portal — defaults
+# =============================================================================
+# The vpn-portal VM in range-config.yml carries NO role_vars block, so every var
+# below must have a working default. These names match the spec's role_vars.
+
+# ---- Weak dashboard credentials (the M1.3 default-cred login) ----------------
+portal_user: admin
+portal_pass: admin
+
+# ---- CHARLIE domain VLAN (used to build the pushed route 10.<R>.<vlan>.0/24) --
+vpn_charlie_vlan: 30
+
+# ---- OpenVPN server parameters ----------------------------------------------
+vpn_port: 1194
+vpn_proto: udp
+vpn_dev: tun
+# The VPN client pool. Deliberately 172.16.20.0/24 (matches the firewall note in
+# the spec: NAT source 172.16.20.0/24). topology subnet -> one IP per client.
+vpn_server_network: "172.16.20.0"
+vpn_server_netmask: "255.255.255.0"
+vpn_server_cidr: "172.16.20.0/24"
+vpn_client_name: client1
+# What the .ovpn connects back to. Ludus `dns_rewrites` publishes
+# vpn.tlo-corp.com -> this VM range-wide, so the FQDN resolves from Kali; the
+# portal's own IP is filled in at runtime as a comment fallback in the profile.
+vpn_remote_host: "vpn.tlo-corp.com"
+# Optional DNS to push to VPN clients (empty = don't push). Set to the ext-dns
+# host (10.<R>.20.20) if you want pushed resolution.
+vpn_push_dns: ""
+# easy-rsa RSA key size. 2048 keeps gen-dh fast enough for a 2-CPU VM.
+vpn_key_size: 2048
+
+# ---- On-disk layout ----------------------------------------------------------
+easyrsa_dir: /etc/openvpn/easy-rsa
+easyrsa_pki: /etc/openvpn/easy-rsa/pki      # EASYRSA_PKI target (keep in sync with easyrsa_dir)
+easyrsa_bin: /usr/share/easy-rsa/easyrsa    # shipped by the Debian easy-rsa package
+ovpn_server_dir: /etc/openvpn/server
+ovpn_client_out: /root/client.ovpn        # operator convenience copy
+
+# ---- Weak web dashboard (nginx) ----------------------------------------------
+web_root: /var/www/corpvpn
+portal_server_name: "vpn.tlo-corp.com vpn01.tlo-corp.local _"
+# Intentional information-leak headers (recon breadcrumbs for M1.2 `curl -I`).
+portal_header_powered_by: "CorpVPN/1.2.3 (Debian)"
+portal_header_backend: "vpn01.tlo-corp.local"
+
+# ---- Packages ----------------------------------------------------------------
+tlo_vpn_packages:
+  - openvpn
+  - easy-rsa
+  - nginx
+  - openssl
+  - iptables
+  - iptables-persistent
+  - python3-passlib   # required by community.general.htpasswd
+  - curl

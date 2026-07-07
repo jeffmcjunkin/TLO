@@ -1,0 +1,61 @@
+---
+# Runs on oscar-hardhat (Debian 12). Docker is provided by the geerlingguy.docker dependency.
+# Clones and starts the open-source HardHat C2 project. Idempotent.
+
+- name: Install git
+  ansible.builtin.apt:
+    name: git
+    state: present
+    update_cache: true
+
+- name: Clone HardHat C2 at the pinned ref
+  ansible.builtin.git:
+    repo: "{{ hardhat_repo }}"
+    dest: "{{ hardhat_dir }}"
+    version: "{{ hardhat_version }}"
+    depth: 1
+    force: true
+
+- name: Locate the compose file in the repo
+  ansible.builtin.find:
+    paths: "{{ hardhat_dir }}"
+    patterns: "docker-compose*.yml,compose*.yml"
+    recurse: true
+  register: _hh_compose
+
+- name: Fail if no compose file found (upstream layout changed — re-pin hardhat_version)
+  ansible.builtin.assert:
+    that: _hh_compose.matched | int > 0
+    fail_msg: "No docker-compose file in {{ hardhat_dir }} at {{ hardhat_version }} — verify upstream layout."
+
+- name: Set compose directory fact
+  ansible.builtin.set_fact:
+    hardhat_compose_dir: "{{ (_hh_compose.files | sort(attribute='path') | first).path | dirname }}"
+    hardhat_compose_file: "{{ (_hh_compose.files | sort(attribute='path') | first).path | basename }}"
+
+# The first-run admin credential is seeded deterministically so the Milestone-6 RE puzzle
+# unlocks a working login. HardHat reads its admin seed from environment; we provide a .env
+# consumed by compose. NOTE: verify the exact env var names against the pinned HardHat version
+# at deploy — adjust here if upstream differs (this is the one integration point to confirm live).
+- name: Drop a .env with the deterministic admin credential
+  ansible.builtin.copy:
+    dest: "{{ hardhat_compose_dir }}/.env"
+    mode: "0600"
+    content: |
+      HARDHAT_ADMIN_USERNAME={{ hardhat_admin_user }}
+      HARDHAT_ADMIN_PASSWORD={{ hardhat_admin_password }}
+      TEAMSERVER_PORT={{ hardhat_teamserver_port }}
+      UI_PORT={{ hardhat_ui_port }}
+
+- name: Start HardHat C2 (docker compose up -d)
+  ansible.builtin.command:
+    cmd: "docker compose -f {{ hardhat_compose_file }} up -d"
+    chdir: "{{ hardhat_compose_dir }}"
+  register: _hh_up
+  changed_when: "'Started' in _hh_up.stderr or 'Created' in _hh_up.stderr or _hh_up.rc == 0"
+
+- name: Wait for the HardHat TeamServer port
+  ansible.builtin.wait_for:
+    port: "{{ hardhat_teamserver_port }}"
+    timeout: 300
+  ignore_errors: true   # first build can be slow; deploy validation re-checks

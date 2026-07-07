@@ -1,0 +1,47 @@
+# {{ ansible_managed }}
+# TLO CorpVPN weak dashboard. Default creds ({{ portal_user }}:{{ portal_pass }}),
+# serves + lists the .ovpn, and intentionally leaks server/backend headers.
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    listen 443 ssl default_server;
+    listen [::]:443 ssl default_server;
+    server_name {{ portal_server_name }};
+
+    ssl_certificate     /etc/ssl/certs/corpvpn.crt;
+    ssl_certificate_key /etc/ssl/private/corpvpn.key;
+
+    # --- Intentional information leaks (M1.2 `curl -I` recon) ---
+    server_tokens on;                                              # leak nginx version in Server:
+    add_header X-Powered-By "{{ portal_header_powered_by }}" always;
+    add_header X-Backend "{{ portal_header_backend }}" always;
+
+    root {{ web_root }};
+    index index.html;
+
+    # Default-cred gate (M1.3). HTTP Basic — admin:admin.
+    auth_basic "CorpVPN Portal - Authentication Required";
+    auth_basic_user_file /etc/nginx/.htpasswd;
+
+    location = / {
+        try_files /index.html =404;
+    }
+
+    # Serve the client profile as a download.
+    location = /client.ovpn {
+        alias {{ web_root }}/client.ovpn;
+        default_type application/x-openvpn-profile;
+        add_header Content-Disposition 'attachment; filename="client.ovpn"';
+        # add_header inside a location resets inherited headers — re-add the leaks.
+        add_header X-Powered-By "{{ portal_header_powered_by }}" always;
+        add_header X-Backend "{{ portal_header_backend }}" always;
+    }
+
+    # Directory listing so the profile is discoverable (M1.4).
+    location /downloads/ {
+        alias {{ web_root }}/downloads/;
+        autoindex on;
+        add_header X-Powered-By "{{ portal_header_powered_by }}" always;
+        add_header X-Backend "{{ portal_header_backend }}" always;
+    }
+}

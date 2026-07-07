@@ -1,0 +1,25 @@
+---
+# oscar_kcd — TLO training range (oscar.local)
+# Creates the domain service/admin accounts and configures Kerberos constrained
+# delegation used by Milestone 5 of "The Last Ones" training range. Isolated lab use only.
+dependencies: []
+
+galaxy_info:
+  role_name: oscar_kcd
+  author: TLO range
+  description: >
+    Create oscar.local service/privileged accounts and configure Kerberos
+    constrained delegation (msDS-AllowedToDelegateTo + protocol transition) for the
+    TLO security-training range. Authorized isolated-lab use only.
+  company: The Last Ones range
+  license: GPL-3.0-or-later
+  min_ansible_version: "2.14"
+  platforms:
+    - name: Windows
+      versions:
+        - "2022"
+  galaxy_tags:
+    - ludus
+    - active_directory
+    - kerberos
+    - security_lab

@@ -1,0 +1,346 @@
+---
+# =============================================================================
+# tlo_vpn_portal — External DMZ CorpVPN appliance (VLAN 20, 10.<R>.20.10)
+# =============================================================================
+# LOAD-BEARING: the OpenVPN + NAT here is the only path into CHARLIE (VLAN 30).
+# Kill the tunnel -> CHARLIE goes dark. Idempotent; safe to re-run.
+
+# ---------------------------------------------------------------------------
+# 0. Derive the range octet <R> and the VLAN-20 NIC from this host's own facts.
+#    Do NOT hardcode. The Ludus Debian VM is single-NIC, so the interface that
+#    holds a 10.x.20.x address is both the default route and the MASQUERADE NIC.
+# ---------------------------------------------------------------------------
+- name: Gather facts
+  ansible.builtin.setup:
+
+- name: Find the VLAN-20 interface and this host's External IP
+  ansible.builtin.shell: |
+    set -o pipefail
+    ip -o -4 addr show | awk '/inet 10\.[0-9]+\.20\./ {print $2" "$4; exit}'
+  args:
+    executable: /bin/bash
+  register: tlo_vlan20_addr
+  changed_when: false
+
+- name: Assert we located the VLAN-20 address
+  ansible.builtin.assert:
+    that:
+      - tlo_vlan20_addr.stdout | length > 0
+    fail_msg: >-
+      Could not find a 10.x.20.x address on this host. tlo_vpn_portal must run on
+      the External DMZ (VLAN 20) VM. Interfaces seen:
+      {{ ansible_interfaces | join(', ') }}
+    success_msg: "VLAN-20 binding found: {{ tlo_vlan20_addr.stdout }}"
+
+- name: Derive range octet, portal IP and VLAN-20 NIC
+  ansible.builtin.set_fact:
+    tlo_vlan20_nic: "{{ tlo_vlan20_addr.stdout.split()[0] }}"
+    tlo_portal_ip: "{{ tlo_vlan20_addr.stdout.split()[1].split('/')[0] }}"
+    tlo_range_octet: "{{ tlo_vlan20_addr.stdout.split()[1].split('.')[1] }}"
+
+- name: Compute the CHARLIE network to route/push
+  ansible.builtin.set_fact:
+    tlo_charlie_net: "10.{{ tlo_range_octet }}.{{ vpn_charlie_vlan }}.0"
+
+- name: Show derived topology values
+  ansible.builtin.debug:
+    msg: >-
+      range=<R>={{ tlo_range_octet }} portal_ip={{ tlo_portal_ip }}
+      nic={{ tlo_vlan20_nic }} push_route={{ tlo_charlie_net }}/24
+      vpn_pool={{ vpn_server_cidr }}
+
+# ---------------------------------------------------------------------------
+# 1. Packages
+# ---------------------------------------------------------------------------
+- name: Preseed iptables-persistent (do not auto-save on install)
+  become: true
+  ansible.builtin.debconf:
+    name: iptables-persistent
+    question: "{{ item }}"
+    vtype: boolean
+    value: "false"
+  loop:
+    - iptables-persistent/autosave_v4
+    - iptables-persistent/autosave_v6
+
+- name: Install OpenVPN + easy-rsa + nginx + iptables tooling
+  become: true
+  ansible.builtin.apt:
+    name: "{{ tlo_vpn_packages }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Ensure OpenVPN + easy-rsa directories exist
+  become: true
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0700"
+  loop:
+    - "{{ ovpn_server_dir }}"
+    - "{{ easyrsa_dir }}"
+
+# ---------------------------------------------------------------------------
+# 2. easy-rsa PKI  (init-pki -> CA -> server cert -> client cert -> dh)
+#    We call the packaged easyrsa directly with EASYRSA_PKI so we don't depend
+#    on `make-cadir`'s path. Each step is creates-guarded -> idempotent.
+# ---------------------------------------------------------------------------
+- name: Assert the easyrsa binary is present
+  become: true
+  ansible.builtin.stat:
+    path: "{{ easyrsa_bin }}"
+  register: tlo_easyrsa_stat
+  failed_when: not tlo_easyrsa_stat.stat.exists
+
+- name: Initialise the PKI
+  become: true
+  ansible.builtin.command:
+    cmd: "{{ easyrsa_bin }} init-pki"
+    creates: "{{ easyrsa_pki }}"
+  environment:
+    EASYRSA_BATCH: "1"
+    EASYRSA_PKI: "{{ easyrsa_pki }}"
+
+- name: Build the CA (no passphrase)
+  become: true
+  ansible.builtin.command:
+    cmd: "{{ easyrsa_bin }} build-ca nopass"
+    creates: "{{ easyrsa_pki }}/ca.crt"
+  environment:
+    EASYRSA_BATCH: "1"
+    EASYRSA_PKI: "{{ easyrsa_pki }}"
+    EASYRSA_REQ_CN: "TLO-CorpVPN-CA"
+    EASYRSA_KEY_SIZE: "{{ vpn_key_size }}"
+
+- name: Build the server certificate
+  become: true
+  ansible.builtin.command:
+    cmd: "{{ easyrsa_bin }} build-server-full server nopass"
+    creates: "{{ easyrsa_pki }}/issued/server.crt"
+  environment:
+    EASYRSA_BATCH: "1"
+    EASYRSA_PKI: "{{ easyrsa_pki }}"
+    EASYRSA_KEY_SIZE: "{{ vpn_key_size }}"
+
+- name: Build the ONE client certificate
+  become: true
+  ansible.builtin.command:
+    cmd: "{{ easyrsa_bin }} build-client-full {{ vpn_client_name }} nopass"
+    creates: "{{ easyrsa_pki }}/issued/{{ vpn_client_name }}.crt"
+  environment:
+    EASYRSA_BATCH: "1"
+    EASYRSA_PKI: "{{ easyrsa_pki }}"
+    EASYRSA_KEY_SIZE: "{{ vpn_key_size }}"
+
+- name: Generate Diffie-Hellman parameters (can take up to ~1 min)
+  become: true
+  ansible.builtin.command:
+    cmd: "{{ easyrsa_bin }} gen-dh"
+    creates: "{{ easyrsa_pki }}/dh.pem"
+  environment:
+    EASYRSA_BATCH: "1"
+    EASYRSA_PKI: "{{ easyrsa_pki }}"
+    EASYRSA_KEY_SIZE: "{{ vpn_key_size }}"
+
+- name: Generate the tls-crypt control-channel key
+  become: true
+  ansible.builtin.command:
+    cmd: "openvpn --genkey secret {{ ovpn_server_dir }}/ta.key"
+    creates: "{{ ovpn_server_dir }}/ta.key"
+
+# ---------------------------------------------------------------------------
+# 3. OpenVPN server config + service
+# ---------------------------------------------------------------------------
+- name: Deploy the OpenVPN server.conf
+  become: true
+  ansible.builtin.template:
+    src: server.conf.j2
+    dest: "{{ ovpn_server_dir }}/server.conf"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: restart openvpn
+
+- name: Enable and start the OpenVPN server
+  become: true
+  ansible.builtin.systemd:
+    name: "openvpn-server@server"
+    enabled: true
+    state: started
+
+# ---------------------------------------------------------------------------
+# 4. Routing / NAT — ip_forward + MASQUERADE out the VLAN-20 NIC.
+#    This is what makes the pushed CHARLIE route actually reach CHARLIE.
+# ---------------------------------------------------------------------------
+- name: Enable IPv4 forwarding (persistent)
+  become: true
+  ansible.posix.sysctl:
+    name: net.ipv4.ip_forward
+    value: "1"
+    sysctl_set: true
+    state: present
+    reload: true
+
+- name: NAT MASQUERADE for the VPN pool out the VLAN-20 NIC
+  become: true
+  ansible.builtin.iptables:
+    table: nat
+    chain: POSTROUTING
+    source: "{{ vpn_server_cidr }}"
+    out_interface: "{{ tlo_vlan20_nic }}"
+    jump: MASQUERADE
+    comment: "TLO CorpVPN: SNAT VPN clients into CHARLIE via {{ tlo_vlan20_nic }}"
+  notify: save iptables
+
+- name: FORWARD allow VPN pool outbound
+  become: true
+  ansible.builtin.iptables:
+    chain: FORWARD
+    source: "{{ vpn_server_cidr }}"
+    jump: ACCEPT
+    comment: "TLO CorpVPN: forward VPN clients outbound"
+  notify: save iptables
+
+- name: FORWARD allow established/related back to the VPN pool
+  become: true
+  ansible.builtin.iptables:
+    chain: FORWARD
+    destination: "{{ vpn_server_cidr }}"
+    ctstate:
+      - ESTABLISHED
+      - RELATED
+    jump: ACCEPT
+    comment: "TLO CorpVPN: return traffic to VPN clients"
+  notify: save iptables
+
+# ---------------------------------------------------------------------------
+# 5. Assemble the inline client.ovpn from the freshly-issued certs.
+#    Certs live on the remote host, so slurp them and template the profile.
+# ---------------------------------------------------------------------------
+- name: Slurp the PKI material for the inline profile
+  become: true
+  ansible.builtin.slurp:
+    src: "{{ item }}"
+  register: tlo_ovpn_pki
+  loop:
+    - "{{ easyrsa_dir }}/pki/ca.crt"
+    - "{{ easyrsa_dir }}/pki/issued/{{ vpn_client_name }}.crt"
+    - "{{ easyrsa_dir }}/pki/private/{{ vpn_client_name }}.key"
+    - "{{ ovpn_server_dir }}/ta.key"
+  loop_control:
+    label: "{{ item | basename }}"
+
+- name: Register decoded PKI contents
+  ansible.builtin.set_fact:
+    ovpn_ca_cert: "{{ tlo_ovpn_pki.results[0].content | b64decode }}"
+    ovpn_client_cert: "{{ tlo_ovpn_pki.results[1].content | b64decode }}"
+    ovpn_client_key: "{{ tlo_ovpn_pki.results[2].content | b64decode }}"
+    ovpn_tls_crypt: "{{ tlo_ovpn_pki.results[3].content | b64decode }}"
+
+- name: Write the operator convenience copy of client.ovpn
+  become: true
+  ansible.builtin.template:
+    src: client.ovpn.j2
+    dest: "{{ ovpn_client_out }}"
+    owner: root
+    group: root
+    mode: "0600"
+
+# ---------------------------------------------------------------------------
+# 6. Weak nginx dashboard (default creds, serves the .ovpn, leaky headers)
+# ---------------------------------------------------------------------------
+- name: Create the web root and downloads dir
+  become: true
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - "{{ web_root }}"
+    - "{{ web_root }}/downloads"
+
+- name: Publish client.ovpn under the web root (served + listed)
+  become: true
+  ansible.builtin.template:
+    src: client.ovpn.j2
+    dest: "{{ item }}"
+    owner: root
+    group: www-data
+    mode: "0644"
+  loop:
+    - "{{ web_root }}/client.ovpn"
+    - "{{ web_root }}/downloads/client.ovpn"
+
+- name: Deploy the CorpVPN dashboard index page
+  become: true
+  ansible.builtin.template:
+    src: index.html.j2
+    dest: "{{ web_root }}/index.html"
+    owner: root
+    group: www-data
+    mode: "0644"
+
+- name: Generate the self-signed TLS cert for :443
+  become: true
+  ansible.builtin.command:
+    cmd: >-
+      openssl req -x509 -newkey rsa:2048 -nodes
+      -keyout /etc/ssl/private/corpvpn.key
+      -out /etc/ssl/certs/corpvpn.crt
+      -days 3650 -subj "/O=TLO Corp/OU=IT/CN=vpn.tlo-corp.com"
+    creates: /etc/ssl/certs/corpvpn.crt
+
+- name: Create the htpasswd file with the default portal creds
+  become: true
+  community.general.htpasswd:
+    path: /etc/nginx/.htpasswd
+    name: "{{ portal_user }}"
+    password: "{{ portal_pass }}"
+    owner: root
+    group: www-data
+    mode: "0640"
+
+- name: Deploy the nginx site
+  become: true
+  ansible.builtin.template:
+    src: nginx-corpvpn.conf.j2
+    dest: /etc/nginx/sites-available/corpvpn.conf
+    mode: "0644"
+  notify: reload nginx
+
+- name: Enable the CorpVPN site
+  become: true
+  ansible.builtin.file:
+    src: /etc/nginx/sites-available/corpvpn.conf
+    dest: /etc/nginx/sites-enabled/corpvpn.conf
+    state: link
+  notify: reload nginx
+
+- name: Disable the default nginx site
+  become: true
+  ansible.builtin.file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  notify: reload nginx
+
+- name: Validate nginx configuration
+  become: true
+  ansible.builtin.command: nginx -t
+  changed_when: false
+
+- name: Enable and start nginx
+  become: true
+  ansible.builtin.service:
+    name: nginx
+    enabled: true
+    state: started
+
+- name: Portal summary
+  ansible.builtin.debug:
+    msg:
+      - "CorpVPN portal up on http(s)://{{ tlo_portal_ip }}/  (creds {{ portal_user }}:{{ portal_pass }})"
+      - "OpenVPN :{{ vpn_port }}/{{ vpn_proto }} pool {{ vpn_server_cidr }} -> pushes route {{ tlo_charlie_net }}/24"
+      - "NAT MASQUERADE out {{ tlo_vlan20_nic }}; this box is the ONLY ingress into CHARLIE."

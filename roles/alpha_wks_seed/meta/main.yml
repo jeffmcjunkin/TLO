@@ -1,0 +1,21 @@
+---
+dependencies: []
+
+galaxy_info:
+  role_name: alpha_wks_seed
+  author: TLO range team
+  description: >-
+    Plants a credential-leaking PSReadline console history for the autologon user
+    devuser on ALPHA-WKS (Win11). Milestone 7.4 (PS history secrets): the history
+    leaks the GitLab PAT (shared with alpha_gitlab_seed), the ALPHA-SECRETS appuser
+    SQL password, and svc_build credentials.
+  company: TLO
+  license: MIT
+  min_ansible_version: "2.14"
+  platforms:
+    - name: Windows
+      versions:
+        - "2022"
+
+collections:
+  - ansible.windows

@@ -1,0 +1,146 @@
+---
+# =============================================================================
+# charlie_ad_vulns  --  runs on CHARLIE-DC1 (primary-dc, charlie.local)
+# =============================================================================
+# Creates every charlie.local account the attack chain needs and plants the
+# AS-REP roasting misconfiguration. Idempotent + re-runnable. Because this role
+# runs ON the DC over WinRM as the domain administrator, microsoft.ad.* use the
+# ambient (current-session) domain credentials -- no domain_username needed.
+#
+# Techniques planted here:
+#   * AD account seeding (reuben / svc_helpdesk / helpdesk_admin / webed)  -- M2/M3/M4
+#   * AS-REP roasting: svc_helpdesk userAccountControl DONT_REQ_PREAUTH     -- M2.3
+#   * Weak (rockyou) service-account password                              -- M2.3
+# Downstream dependency (NOT done here, noted for clarity):
+#   * ludus_local_users_and_groups on AREUBEN-WS adds svc_helpdesk +
+#     helpdesk_admin to local Administrators (enables M3.1 DCOM + M4.3 relay).
+# =============================================================================
+
+- name: Compute domain distinguished name from FQDN
+  ansible.builtin.set_fact:
+    charlie_domain_dn: "DC={{ charlie_fqdn.split('.') | join(',DC=') }}"
+
+# --- OU for computer objects (parity with OSCAR's OU=Workstations) ----------
+- name: Ensure the Workstations OU exists
+  microsoft.ad.ou:
+    name: "{{ charlie_workstations_ou }}"
+    path: "{{ charlie_domain_dn }}"
+    state: present
+    # Leave protected_from_accidental_deletion at the module default; harmless
+    # in a lab and matches how the OSCAR LAPS OU is referenced.
+
+# --- Flavor group so the helpdesk accounts look like a real IT team ---------
+- name: Ensure the IT Helpdesk group exists
+  microsoft.ad.group:
+    name: "{{ charlie_helpdesk_group }}"
+    scope: global
+    category: security
+    state: present
+
+# =============================================================================
+# reuben (Reuben Ashford) -- normal domain user.
+# Autologon user on AREUBEN-WS; his saved Chrome login for the wiki is the M3.2
+# loot. Password MUST match the AREUBEN-WS autologon_password in range-config.
+# =============================================================================
+- name: Create reuben (normal user; AREUBEN-WS autologon / M3.2 Chrome victim)
+  microsoft.ad.user:
+    name: "{{ charlie_reuben_username }}"
+    firstname: "{{ charlie_reuben_firstname }}"
+    surname: "{{ charlie_reuben_lastname }}"
+    password: "{{ charlie_reuben_password }}"
+    # Do not force a reset -- autologon needs a stable, known password.
+    password_never_expires: true
+    update_password: on_create
+    upn: "{{ charlie_reuben_username }}@{{ charlie_fqdn }}"
+    description: "Reuben Ashford - Sales. Workstation AREUBEN-WS."
+    enabled: true
+    state: present
+
+# =============================================================================
+# helpdesk_admin -- privileged victim (M4). Auto-browses the wiki from
+# CHARLIE-FS (autologon) so its NTLM can be coerced+relayed to AREUBEN-WS SMB.
+# Password MUST match the CHARLIE-FS autologon_password in range-config.
+# =============================================================================
+- name: Create helpdesk_admin (privileged relay victim / M4)
+  microsoft.ad.user:
+    name: "{{ charlie_helpdesk_admin_username }}"
+    firstname: Helpdesk
+    surname: Admin
+    password: "{{ charlie_helpdesk_admin_password }}"
+    password_never_expires: true
+    update_password: on_create
+    upn: "{{ charlie_helpdesk_admin_username }}@{{ charlie_fqdn }}"
+    description: "Helpdesk administrator - workstation support (local admin on AREUBEN-WS)."
+    enabled: true
+    groups:
+      set:
+        - Domain Users
+        - "{{ charlie_helpdesk_group }}"
+    state: present
+
+# =============================================================================
+# svc_helpdesk -- AS-REP roastable service account (M2.3).
+# Step 1: create the account with a rockyou-crackable password.
+# Step 2: flip the DONT_REQ_PREAUTH userAccountControl bit (below).
+# =============================================================================
+- name: Create svc_helpdesk (legacy service account; rockyou password / M2.3)
+  microsoft.ad.user:
+    name: "{{ charlie_asrep_user }}"
+    firstname: Service
+    surname: Helpdesk
+    password: "{{ charlie_asrep_password }}"
+    password_never_expires: true
+    update_password: on_create
+    upn: "{{ charlie_asrep_user }}@{{ charlie_fqdn }}"
+    description: "Legacy helpdesk automation account. Kerberos pre-auth disabled for an old ticketing integration."
+    enabled: true
+    groups:
+      set:
+        - Domain Users
+        - "{{ charlie_helpdesk_group }}"
+    state: present
+
+# --- AS-REP roasting: disable Kerberos pre-authentication (M2.3) ------------
+# microsoft.ad.user cannot set the DONT_REQ_PREAUTH (0x400000) UAC bit, so we
+# use Set-ADAccountControl. Wrapped in win_powershell with a read-first check so
+# the task only reports "changed" when it actually flips the bit (idempotent).
+# Attacker path: impacket GetNPUsers.py charlie.local/ -usersfile users.txt
+#                -no-pass -dc-ip <DC>  ->  $krb5asrep$  ->  hashcat -m 18200.
+- name: Make svc_helpdesk AS-REP roastable (DoNotRequirePreAuth)
+  ansible.windows.win_powershell:
+    parameters:
+      SamAccountName: "{{ charlie_asrep_user }}"
+    script: |
+      param([string]$SamAccountName)
+      Import-Module ActiveDirectory -ErrorAction Stop
+      $u = Get-ADUser -Identity $SamAccountName -Properties DoesNotRequirePreAuth
+      if (-not $u.DoesNotRequirePreAuth) {
+          Set-ADAccountControl -Identity $SamAccountName -DoesNotRequirePreAuth $true
+          $Ansible.Changed = $true
+      } else {
+          $Ansible.Changed = $false
+      }
+      # Verify the bit is set so a failure surfaces immediately.
+      $after = Get-ADUser -Identity $SamAccountName -Properties DoesNotRequirePreAuth
+      if (-not $after.DoesNotRequirePreAuth) {
+          throw "DoesNotRequirePreAuth is still false for $SamAccountName"
+      }
+
+# =============================================================================
+# webed -- wiki editor (optional; alternative to reusing reuben). The account
+# whose Chrome credential is actually seeded is reuben, so webed is created for
+# completeness only. Toggle off with charlie_create_webed: false.
+# =============================================================================
+- name: Create webed (optional wiki editor)
+  microsoft.ad.user:
+    name: "{{ charlie_webed_username }}"
+    firstname: "{{ charlie_webed_firstname }}"
+    surname: "{{ charlie_webed_lastname }}"
+    password: "{{ charlie_webed_password }}"
+    password_never_expires: true
+    update_password: on_create
+    upn: "{{ charlie_webed_username }}@{{ charlie_fqdn }}"
+    description: "IT wiki editor."
+    enabled: true
+    state: present
+  when: charlie_create_webed | bool

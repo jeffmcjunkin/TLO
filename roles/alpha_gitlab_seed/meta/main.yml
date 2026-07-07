@@ -1,0 +1,23 @@
+---
+dependencies: []
+
+galaxy_info:
+  role_name: alpha_gitlab_seed
+  author: TLO range team
+  description: >-
+    Seeds GitLab CE on alpha-gitlab (Debian 12) after geerlingguy.gitlab. Sets a known
+    root password, mints a DETERMINISTIC PAT (the glpat- token leaked elsewhere in the
+    range), creates group/project alpha/payment-service, pushes a crafted git history in
+    which a commit hardcodes prod DB creds + the PAT and a later commit "removes" them
+    (secret survives in `git log -p` — M7.3), adds masked CI/CD variables (M7.5), and
+    commits a .gitlab-ci.yml that consumes them.
+  company: TLO
+  license: MIT
+  min_ansible_version: "2.14"
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm
+
+collections:
+  - community.general      # only needed for the optional 'modules' seed method

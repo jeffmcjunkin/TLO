@@ -1,0 +1,24 @@
+---
+# charlie_ad_vulns -- CHARLIE-DC1 account creation + AS-REP roastable service acct
+dependencies: []
+
+galaxy_info:
+  role_name: charlie_ad_vulns
+  author: TLO range authoring
+  description: >-
+    Owns ALL charlie.local account creation for The Last Ones range (reuben,
+    svc_helpdesk, helpdesk_admin, webed), creates the Workstations OU, and makes
+    svc_helpdesk AS-REP roastable (DoNotRequirePreAuth) with a rockyou-crackable
+    password. Runs on the primary DC. Milestone 2.3.
+  company: TLO
+  license: MIT
+  min_ansible_version: "2.12"
+  platforms:
+    - name: Windows
+      versions:
+        - "2019"
+        - "2022"
+
+collections:
+  - microsoft.ad
+  - ansible.windows

@@ -1,0 +1,33 @@
+---
+# TLO custom role — tlo_vpn_portal  (LOAD-BEARING: the M1 hard gate into CHARLIE)
+# Debian 12, VLAN 20, host IP 10.<R>.20.10.
+dependencies: []
+
+galaxy_info:
+  role_name: tlo_vpn_portal
+  author: TLO range team
+  description: >-
+    The External DMZ CorpVPN appliance. (a) A real OpenVPN server (easy-rsa PKI +
+    server cert + one client cert, inline client.ovpn, topology subnet
+    172.16.20.0/24, pushes the CHARLIE route, ip_forward + NAT MASQUERADE out the
+    VLAN-20 NIC) — the ONLY ingress into CHARLIE. (b) A weak nginx dashboard on
+    :80/:443 with default creds (admin:admin) that lists and serves the .ovpn and
+    leaks HTTP headers (server_tokens on, X-Powered-By, X-Backend). The range's
+    second octet <R> and the VLAN-20 NIC are derived at runtime from facts.
+  company: TLO
+  license: MIT
+  min_ansible_version: "2.14"
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm
+  galaxy_tags:
+    - openvpn
+    - nginx
+    - ludus
+    - security_lab
+    - pivot
+
+collections:
+  - community.general
+  - ansible.posix

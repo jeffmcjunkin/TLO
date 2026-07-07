@@ -1,0 +1,17 @@
+---
+# Runs on OPERATOR-WS1. Renders + executes the build script that plants the RE crackme service.
+- name: Render the RE service build script
+  ansible.windows.win_template:
+    src: build_re_service.ps1.j2
+    dest: 'C:\Windows\Temp\build_re_service.ps1'
+
+- name: Build + install the OscarC2Agent service
+  ansible.windows.win_command: powershell.exe -ExecutionPolicy Bypass -File C:\Windows\Temp\build_re_service.ps1
+  register: _re_build
+  changed_when: "'installed' in _re_build.stdout and 'already installed' not in _re_build.stdout"
+  failed_when: _re_build.rc != 0
+
+- name: Remove the build script
+  ansible.windows.win_file:
+    path: 'C:\Windows\Temp\build_re_service.ps1'
+    state: absent

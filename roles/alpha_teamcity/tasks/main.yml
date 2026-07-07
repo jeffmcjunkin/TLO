@@ -1,0 +1,111 @@
+---
+# =====================================================================
+# alpha_teamcity — install TeamCity server + agent, wire agent-as-DA, ship the
+# supply-chain C# project + poison patch (M7.5 / M8.1).
+#
+# HONEST FLAG (unattended install fragility): JetBrains does not document a rich
+# silent-config surface for the TeamCity NSIS installer. `/S` performs a silent
+# install of BOTH the server and a build agent as Windows services with defaults
+# (server on :8111, agent service "TCBuildAgent"). We then reconfigure the agent
+# service to log on as svc_build. If JetBrains changes the installer, the /S step
+# and/or the service names below may need adjustment.
+# =====================================================================
+
+# ---- 1. download + silent install ----
+- name: Download the TeamCity Windows installer
+  ansible.windows.win_get_url:
+    url: "{{ alpha_teamcity_installer_url }}"
+    dest: "{{ alpha_teamcity_download_path }}"
+    force: false
+  register: tc_dl
+  retries: 3
+  delay: 15
+  until: tc_dl is succeeded
+
+- name: Check whether the TeamCity server service already exists (idempotency)
+  ansible.windows.win_service_info:
+    name: "{{ alpha_teamcity_server_service }}"
+  register: tc_srv_info
+
+# NSIS: /S = silent, /D=<dir> MUST be last and unquoted. Installs server + agent
+# as services and starts them. Server data dir defaults under ProgramData.
+- name: Silent-install TeamCity server + build agent
+  ansible.windows.win_command: >-
+    {{ alpha_teamcity_download_path }} /S /D={{ alpha_teamcity_install_dir }}
+  when: not (tc_srv_info.exists | default(false))
+  register: tc_install
+
+- name: Wait for the TeamCity server to answer on :{{ alpha_teamcity_port }}
+  ansible.windows.win_uri:
+    url: "http://localhost:{{ alpha_teamcity_port }}/login.html"
+    status_code: [200, 401, 302]
+    method: GET
+  register: tc_up
+  retries: 60
+  delay: 10
+  until: tc_up.status is defined and tc_up.status in [200, 401, 302]
+
+# ---- 2. firewall ----
+- name: Allow inbound TeamCity :{{ alpha_teamcity_port }}
+  community.windows.win_firewall_rule:
+    name: "TeamCity {{ alpha_teamcity_port }}"
+    localport: "{{ alpha_teamcity_port }}"
+    direction: in
+    action: allow
+    protocol: tcp
+    enabled: true
+    state: present
+
+# ---- 3. build agent runs as alpha\svc_build (Domain Admin) ----
+- name: Grant svc_build the "Log on as a service" right
+  ansible.windows.win_user_right:
+    name: SeServiceLogonRight
+    users:
+      - "{{ alpha_teamcity_agent_user }}"
+    action: add
+
+- name: Point the build agent at the local server
+  community.windows.win_lineinfile:
+    path: "{{ alpha_teamcity_install_dir }}\\buildAgent\\conf\\buildAgent.properties"
+    regexp: '^serverUrl='
+    line: "serverUrl={{ alpha_teamcity_agent_serverurl }}"
+  # buildAgent.properties may not exist until first agent start; ignore if absent.
+  ignore_errors: true
+
+- name: Reconfigure the build agent service to log on as svc_build (Domain Admin)
+  ansible.windows.win_service:
+    name: "{{ alpha_teamcity_agent_service }}"
+    username: "{{ alpha_teamcity_agent_user }}"
+    password: "{{ alpha_teamcity_agent_password }}"
+    start_mode: auto
+    state: restarted
+  # If the agent service name differs on a newer installer, flag and adjust.
+  ignore_errors: true
+
+# ---- 4. ship the supply-chain C# project + poison patch to disk ----
+- name: Ensure the project directory exists
+  ansible.windows.win_file:
+    path: "{{ alpha_teamcity_project_dest }}"
+    state: directory
+
+- name: Copy the buildable C# project (clean HEAD state) to XY1-ALPHA
+  ansible.windows.win_copy:
+    src: PaymentService/
+    dest: "{{ alpha_teamcity_project_dest }}\\"
+
+- name: Copy the MSBuild locator helper (build.cmd)
+  ansible.windows.win_copy:
+    src: build.cmd
+    dest: "{{ alpha_teamcity_project_dest }}\\build.cmd"
+
+# The poison patch is shipped but NOT applied — it is the artifact the attacker
+# commits/applies during M8.1. Applying + building it as svc_build == Domain Admin.
+- name: Stage the M8.1 poison patch (NOT applied; the attacker applies it)
+  ansible.windows.win_copy:
+    src: poison/
+    dest: "{{ alpha_teamcity_project_dest }}\\poison\\"
+
+# ---- 5. optional: create the TeamCity project + build config over REST ----
+- name: Create the TeamCity project + build config (best-effort)
+  ansible.builtin.include_tasks: create_build_config.yml
+  when: alpha_teamcity_create_build_config | bool

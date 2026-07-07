@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# {{ ansible_managed }}
+# Idempotently mint a BookStack API token for the default admin by inserting
+# directly into the api_tokens table (there is no non-interactive API/CLI to
+# create the FIRST token). The secret is bcrypt-hashed by the BookStack
+# container's own PHP so Laravel's Hash::check() validates it. Also rotates the
+# default admin password. Safe to re-run.
+set -euo pipefail
+
+DB_CTR='{{ charlie_bookstack_db_name_container }}'
+APP_CTR='{{ charlie_bookstack_name }}'
+DB='{{ charlie_bookstack_db_database }}'
+ROOTPW='{{ charlie_bookstack_db_root_password }}'
+ADMIN_EMAIL='{{ charlie_bookstack_admin_email }}'
+ADMIN_PW='{{ charlie_bookstack_admin_password }}'
+TOKEN_ID='{{ charlie_bookstack_api_token_id }}'
+TOKEN_SECRET='{{ charlie_bookstack_api_token_secret }}'
+TOKEN_NAME='{{ charlie_bookstack_api_token_name }}'
+
+# Pick whichever mysql client the mariadb image ships.
+if docker exec "$DB_CTR" sh -c 'command -v mariadb' >/dev/null 2>&1; then
+  MYSQL="docker exec -i $DB_CTR mariadb -uroot -p$ROOTPW $DB"
+else
+  MYSQL="docker exec -i $DB_CTR mysql -uroot -p$ROOTPW $DB"
+fi
+
+# bcrypt hashes computed by the app container's PHP (matches Laravel Hash).
+php_bcrypt() { docker exec "$APP_CTR" php -r 'echo password_hash($argv[1], PASSWORD_BCRYPT, ["cost"=>10]);' "$1"; }
+SECRET_HASH="$(php_bcrypt "$TOKEN_SECRET")"
+ADMIN_HASH="$(php_bcrypt "$ADMIN_PW")"
+
+# Rotate the default admin password.
+$MYSQL <<SQL
+UPDATE users SET password = '${ADMIN_HASH}' WHERE email = '${ADMIN_EMAIL}';
+SQL
+
+# Insert the API token for the admin user if not already present.
+$MYSQL <<SQL
+INSERT INTO api_tokens (name, token_id, secret, user_id, expires_at, created_at, updated_at)
+SELECT '${TOKEN_NAME}', '${TOKEN_ID}', '${SECRET_HASH}', u.id,
+       '2099-12-31 00:00:00', NOW(), NOW()
+FROM users u
+WHERE u.email = '${ADMIN_EMAIL}'
+  AND NOT EXISTS (SELECT 1 FROM api_tokens t WHERE t.token_id = '${TOKEN_ID}');
+SQL
+
+echo "bootstrap_token: ok"

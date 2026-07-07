@@ -95,8 +95,7 @@ ludus:
       fqdn: charlie.local
       role: primary-dc
     roles:
-      - ludus_bulk_ad_content       # Pro: OUs/users/groups from CSV (reuben, svc_helpdesk, helpdesk_admin)
-      - charlie_ad_vulns            # CUSTOM: DoNotRequirePreAuth on svc_helpdesk + weak pw
+      - charlie_ad_vulns            # CUSTOM: owns charlie.local accounts (reuben, svc_helpdesk AS-REP, helpdesk_admin) + weak pw
     role_vars:
       charlie_asrep_user: svc_helpdesk
 
@@ -169,9 +168,8 @@ ludus:
       fqdn: oscar.local
       role: primary-dc
     roles:
-      - ludus_bulk_ad_content       # Pro: svc_mssql, appadmin, users
+      - oscar_kcd                   # CUSTOM: owns oscar.local accounts (svc_mssql, oscaradmin) + Workstations OU + constrained delegation (runs first)
       - badsectorlabs.ludus_windows_utils.ludus_ad_laps   # LAPS + readable-LAPS ACL (collection added by install-roles.sh)
-      - oscar_kcd                   # CUSTOM: SPN + msDS-AllowedToDelegateTo + TrustedToAuthForDelegation on svc_mssql
     role_vars:
       ludus_laps_target_ou: "OU=Workstations,DC=oscar,DC=local"
       ludus_laps_install_client: true
@@ -267,8 +265,7 @@ ludus:
       fqdn: alpha.local
       role: primary-dc
     roles:
-      - ludus_bulk_ad_content       # Pro: svc_build (Domain Admins), svc_mssql
-      - alpha_ad_content            # CUSTOM: ensure svc_build in Domain Admins (poisoned-pipeline payoff)
+      - alpha_ad_content            # CUSTOM: owns alpha.local accounts (svc_build∈Domain Admins, svc_mssql, devuser)
 
   - vm_name: "{{ range_id }}-alpha-wks"
     hostname: "ALPHA-WKS"

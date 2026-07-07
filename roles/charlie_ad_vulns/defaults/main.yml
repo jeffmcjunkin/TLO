@@ -1,0 +1,49 @@
+---
+# =============================================================================
+# charlie_ad_vulns defaults
+# =============================================================================
+# This role OWNS all charlie.local account creation. ludus_bulk_ad_content is
+# treated as ABSENT even if listed before this role in range-config.yml -- every
+# account the CHARLIE attack chain needs is created here so ordering/CSV drift
+# cannot break the range. All passwords that back an autologon in range-config
+# MUST match here (reuben -> AREUBEN-WS, helpdesk_admin -> CHARLIE-FS).
+
+charlie_fqdn: charlie.local          # forest/domain FQDN (DC=charlie,DC=local)
+
+# --- OU for computer objects (parity with OSCAR LAPS OU=Workstations) ---
+charlie_workstations_ou: Workstations
+
+# --- reuben (Reuben Ashford) : normal user; autologon on AREUBEN-WS ---------
+#     His saved Chrome cred for the wiki is dumped in M3.2. Password MUST equal
+#     the AREUBEN-WS windows.autologon_password in range-config.yml.
+charlie_reuben_username: reuben
+charlie_reuben_firstname: Reuben
+charlie_reuben_lastname: Ashford
+charlie_reuben_password: "Reuben.Ashford.2025"
+
+# --- svc_helpdesk : AS-REP roastable service account (M2.3) -----------------
+#     DoNotRequirePreAuth is set via Set-ADAccountControl (microsoft.ad.user
+#     cannot toggle that UAC bit). Password is a rockyou word+year so
+#     GetNPUsers.py -> hashcat -m 18200 -r best64.rule cracks it.
+charlie_asrep_user: svc_helpdesk
+charlie_asrep_password: "Chelsea1998"   # in rockyou; capital C -> needs best64/capitalize rule
+
+# --- helpdesk_admin : privileged relay victim (M4) --------------------------
+#     Auto-browses the wiki from CHARLIE-FS; its coerced NTLM is relayed to
+#     AREUBEN-WS SMB (where it is a local admin via ludus_local_users_and_groups).
+#     Password MUST equal the CHARLIE-FS windows.autologon_password.
+charlie_helpdesk_admin_username: helpdesk_admin
+charlie_helpdesk_admin_password: "Helpdesk!Adm1n"
+
+# --- webed : wiki editor (alternative to reusing reuben) --------------------
+#     Created for completeness. The account whose Chrome cred is actually seeded
+#     is reuben (see charlie_chrome_creds / charlie_bookstack). Set
+#     charlie_create_webed: false to skip.
+charlie_create_webed: true
+charlie_webed_username: webed
+charlie_webed_firstname: Wanda
+charlie_webed_lastname: Edwards
+charlie_webed_password: "W1ki.Editor.2025"
+
+# --- flavor group so helpdesk accounts look like a real IT team -------------
+charlie_helpdesk_group: "IT Helpdesk"

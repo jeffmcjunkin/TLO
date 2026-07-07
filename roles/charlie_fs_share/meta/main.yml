@@ -1,0 +1,25 @@
+---
+# charlie_fs_share -- CHARLIE-FS SMB shares + planted loot
+dependencies: []
+
+galaxy_info:
+  role_name: charlie_fs_share
+  author: TLO range authoring
+  description: >-
+    Creates the IT$ (anonymous-readable) and Backups (Domain Users) SMB shares
+    on CHARLIE-FS and plants the loot: VPN_Setup_Notes.txt (leaks the user list
+    + the AS-REP hint) and a prebuilt, rockyou-crackable passwords.kdbx holding
+    the OSCAR pivot creds. Milestones 2.1/2.2 and 4.4.
+  company: TLO
+  license: MIT
+  min_ansible_version: "2.12"
+  platforms:
+    - name: Windows
+      versions:
+        - "2019"
+        - "2022"
+
+collections:
+  - ansible.windows
+  - community.windows
+  - chocolatey.chocolatey

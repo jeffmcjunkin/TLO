@@ -1,0 +1,42 @@
+---
+# =====================================================================
+# alpha_teamcity — defaults
+# Runs on XY1-ALPHA (Win2022, visual_studio_version: 2022 => MSBuild present).
+# The build agent runs as alpha\svc_build (Domain Admin) -> poisoned pipeline = DA.
+# Refs:
+#   OWASP CICD-SEC-4 (Poisoned Pipeline Execution):
+#     https://owasp.org/www-project-top-10-ci-cd-security-risks/CICD-SEC-04
+#   MITRE T1127.001 (Trusted Developer Utilities: MSBuild):
+#     https://attack.mitre.org/techniques/T1127/001/
+# =====================================================================
+
+# ---- TeamCity install ----
+# Pin a known-good build. The Windows .exe is an NSIS installer supporting /S silent.
+alpha_teamcity_version: "2024.12.1"
+alpha_teamcity_installer_url: "https://download.jetbrains.com/teamcity/TeamCity-{{ alpha_teamcity_version }}.exe"
+alpha_teamcity_download_path: 'C:\Windows\Temp\TeamCity-installer.exe'
+alpha_teamcity_install_dir: 'C:\TeamCity'
+alpha_teamcity_data_dir: 'C:\ProgramData\JetBrains\TeamCity'
+alpha_teamcity_port: 8111
+# Service names the NSIS installer registers (defaults).
+alpha_teamcity_server_service: "TeamCity"
+alpha_teamcity_agent_service: "TCBuildAgent"
+
+# ---- Build agent identity (THE intentional over-privilege) ----
+alpha_teamcity_agent_user: 'alpha\svc_build'
+alpha_teamcity_agent_password: "Bu1ld.Agent.2025!"   # SHARED with alpha_ad_content
+alpha_teamcity_agent_serverurl: "http://localhost:8111"
+
+# ---- Supply-chain build project (shipped in files/PaymentService) ----
+alpha_teamcity_project_dest: 'C:\Projects\payment-service'
+
+# ---- M8.1 poison payload ----
+# The principal added to Domain Admins when the DA agent builds the poisoned repo.
+# Defaults to devuser (which alpha_ad_content creates, so the escalation actually
+# succeeds and is observable in Elastic). In a real op this is attacker-controlled.
+alpha_teamcity_attacker_user: "devuser"
+
+# Create the TeamCity project + build config over REST (best-effort; see honest flags
+# in tasks/create_build_config.yml). If it fails, deployment is NOT failed — the C#
+# project + poison + DA agent (the core artifacts) are still in place.
+alpha_teamcity_create_build_config: true

@@ -1,0 +1,50 @@
+# {{ ansible_managed }}
+# BookStack wiki for CHARLIE -- content sanitization DISABLED (stored XSS, M4.1)
+services:
+  {{ charlie_bookstack_db_name_container }}:
+    image: {{ charlie_bookstack_db_image }}
+    container_name: {{ charlie_bookstack_db_name_container }}
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Etc/UTC
+      - MYSQL_ROOT_PASSWORD={{ charlie_bookstack_db_root_password }}
+      - MYSQL_DATABASE={{ charlie_bookstack_db_database }}
+      - MYSQL_USER={{ charlie_bookstack_db_user }}
+      - MYSQL_PASSWORD={{ charlie_bookstack_db_password }}
+    volumes:
+      - {{ charlie_bookstack_dir }}/db:/config
+    healthcheck:
+      test: ["CMD", "mariadb-admin", "ping", "-h", "127.0.0.1", "-uroot", "-p{{ charlie_bookstack_db_root_password }}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  {{ charlie_bookstack_name }}:
+    image: {{ charlie_bookstack_image }}
+    container_name: {{ charlie_bookstack_name }}
+    depends_on:
+      {{ charlie_bookstack_db_name_container }}:
+        condition: service_healthy
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Etc/UTC
+      - APP_URL={{ charlie_bookstack_url }}
+      - APP_KEY={{ charlie_bookstack_app_key }}
+      - DB_HOST={{ charlie_bookstack_db_name_container }}
+      - DB_PORT=3306
+      - DB_USERNAME={{ charlie_bookstack_db_user }}
+      - DB_PASSWORD={{ charlie_bookstack_db_password }}
+      - DB_DATABASE={{ charlie_bookstack_db_database }}
+{% if charlie_bookstack_allow_content_scripts %}
+      # ---- THE VULN: render page HTML/JS unsanitized (stored XSS, M4.1) ----
+      - ALLOW_CONTENT_SCRIPTS=true
+      - APP_CONTENT_FILTERING=
+{% endif %}
+    volumes:
+      - {{ charlie_bookstack_dir }}/config:/config
+    ports:
+      - "{{ charlie_bookstack_http_port }}:80"
+    restart: unless-stopped

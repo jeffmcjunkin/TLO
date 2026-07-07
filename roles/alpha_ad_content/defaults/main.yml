@@ -1,0 +1,34 @@
+---
+# =====================================================================
+# alpha_ad_content — defaults
+# Runs on DC1-ALPHA (primary-dc for alpha.local). This role OWNS account
+# creation for the ALPHA domain; it does NOT rely on ludus_bulk_ad_content
+# (idempotent overlap is fine if that Pro role also ran on the DC).
+# =====================================================================
+
+# ---- Domain / OU ----
+alpha_ad_domain_fqdn: "alpha.local"
+# Default Users container (microsoft.ad.user accepts a DN in `path`).
+alpha_ad_users_ou: "CN=Users,DC=alpha,DC=local"
+
+# ---- svc_build : TeamCity build-agent service account ----
+# SECURITY (INTENTIONAL, lab-only): svc_build is placed in **Domain Admins**.
+# A CI/CD build agent whose service identity is a Domain Admin is the textbook
+# OWASP CICD-SEC-5 failure (Insufficient PBAC / over-privileged pipeline
+# identity). Poisoning the build (M8.1) therefore escalates straight to DA.
+# NEVER do this in production.
+alpha_svc_build_user: "svc_build"
+# SHARED SECRET: this same password is leaked by alpha_wks_seed (net use in the
+# planted PSReadline history) and used by alpha_teamcity as the agent service
+# logon. Keep the three values in sync (alpha_svc_build_password).
+alpha_svc_build_password: "Bu1ld.Agent.2025!"
+alpha_svc_build_in_domain_admins: true
+
+# ---- svc_mssql : MSSQL service account ----
+alpha_svc_mssql_user: "svc_mssql"
+alpha_svc_mssql_password: "Sql.Svc.2025!"
+
+# ---- devuser : ALPHA-WKS interactive / autologon user ----
+# Password MUST match the autologon_password for ALPHA-WKS in range-config.yml.
+alpha_devuser_user: "devuser"
+alpha_devuser_password: "Dev.User.2025"

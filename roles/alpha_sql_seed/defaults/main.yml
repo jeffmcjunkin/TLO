@@ -1,0 +1,24 @@
+---
+# =====================================================================
+# alpha_sql_seed — defaults
+# Runs on ALPHA-SECRETS AFTER badsectorlabs.ludus_mssql. Milestones 9.1-9.4.
+# DESIGN UPDATE: dd1.alpha is the DC, so ALL M9 SQLi lives on this single MSSQL
+# instance (secrets.alpha) using NESTED vulnerable procs. No second SQL host and no
+# real linked server are required (a loopback linked server is optional flavor).
+# INTENTIONALLY VULNERABLE — LAB ONLY.
+# =====================================================================
+
+alpha_sql_db_name: "SecretsDb"
+alpha_sql_scripts_dir: 'C:\Scripts'
+alpha_sql_seed_remote_path: 'C:\Scripts\seed_vuln.sql'
+
+# Connect locally with the SQL login badsectorlabs.ludus_mssql created for this host
+# (appuser is defined sysadmin in range-config.yml -> role_vars.ludus_mssql_sql_users).
+alpha_sql_instance: "localhost"
+alpha_sql_login: "appuser"
+alpha_sql_password: "Wint3r2024!"
+
+# Optional loopback linked server [SECRETS] -> localhost so the cross-hop payload
+#   x' UNION SELECT EmpId, Name+'|'+SSN+'|'+ApiKey FROM [SECRETS].SecretsDb.dbo.Payroll --
+# resolves on a single instance. Uses @useself='TRUE' (no sa password needed).
+alpha_sql_create_loopback_linked_server: true

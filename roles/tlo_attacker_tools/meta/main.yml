@@ -1,0 +1,31 @@
+---
+# TLO custom role — tlo_attacker_tools
+# Standard Ansible role; added to Ludus via `ludus ansible role add -d ./roles/tlo_attacker_tools`
+# and attached to the Kali operator box (VLAN 10) in range-config.yml.
+dependencies: []
+
+galaxy_info:
+  role_name: tlo_attacker_tools
+  author: TLO range team
+  description: >-
+    Ensure the offensive tooling required for the "The Last Ones" attack chain is
+    present and pinnable on the Kali operator box: nmap, impacket, netexec (nxc),
+    responder/ntlmrelayx, ligolo-ng, chisel, proxychains4, openvpn, bloodhound-python,
+    keepass2john/john, hashcat, plus release binaries staged to /opt (ysoserial.net,
+    Rubeus, GodPotato) for later Windows use. Idempotent and safe to re-run.
+  company: TLO
+  license: MIT
+  min_ansible_version: "2.14"
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm   # Kali is Debian-testing derived; reports as Kali/Debian
+  galaxy_tags:
+    - kali
+    - offensive
+    - ludus
+    - security_lab
+    - red_team
+
+collections:
+  - community.general

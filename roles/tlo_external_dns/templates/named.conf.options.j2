@@ -1,0 +1,25 @@
+// {{ ansible_managed }}
+// TLO External DNS — forwards everything outside the authoritative zone.
+options {
+    directory "/var/cache/bind";
+
+    // Recursive resolver for the range/clients, forwarding upstream.
+    recursion yes;
+    allow-recursion { any; };
+    allow-query { any; };
+    forwarders {
+{% for fwd in dns_forwarders %}
+        {{ fwd }};
+{% endfor %}
+    };
+    forward only;
+
+    // Isolated lab: don't fail resolution on forwarder DNSSEC quirks.
+    dnssec-validation no;
+
+    // INTENTIONAL MISCONFIG: zone transfer open to the world (AXFR leak).
+    allow-transfer { any; };
+
+    listen-on { any; };
+    listen-on-v6 { none; };
+};
