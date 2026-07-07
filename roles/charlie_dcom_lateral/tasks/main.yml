@@ -1,0 +1,51 @@
+---
+# =============================================================================
+# charlie_dcom_lateral — runs on AREUBEN-WS (Windows 10, charlie.local)
+# =============================================================================
+# M3.1 "DCOM lateral": the attacker uses the AS-REP-roasted svc_helpdesk (a local
+# admin here) to execute code over DCOM (Impacket dcomexec MMC20 / ShellWindows).
+# By default the Windows Firewall blocks the RPC endpoint mapper + the dynamic RPC
+# port range that DCOM object activation needs, so we open those on the internal
+# profile. On Windows 10 the classic DCOM lateral objects activate remotely once
+# these ports are reachable (Windows 11 22H2 hardening blocks them regardless,
+# which is why this host is Windows 10).
+#
+# Idempotent.
+# =============================================================================
+
+- name: Allow the RPC endpoint mapper (TCP 135) inbound
+  community.windows.win_firewall_rule:
+    name: "RPC Endpoint Mapper (135)"
+    localport: "135"
+    direction: in
+    action: allow
+    protocol: tcp
+    enabled: true
+    profiles: [domain, private, public]
+    state: present
+
+- name: Allow the dynamic RPC port range inbound (DCOM object activation)
+  community.windows.win_firewall_rule:
+    name: "RPC Dynamic Ports"
+    localport: "49152-65535"
+    direction: in
+    action: allow
+    protocol: tcp
+    enabled: true
+    profiles: [domain, private, public]
+    state: present
+
+# Built-in groups that expose the DCOM/COM+ surface used by dcomexec.
+- name: Enable the WMI / COM+ firewall groups
+  ansible.windows.win_shell: |
+    Enable-NetFirewallRule -DisplayGroup 'Windows Management Instrumentation (WMI)'
+    Enable-NetFirewallRule -DisplayGroup 'COM+ Network Access'
+    Enable-NetFirewallRule -DisplayGroup 'COM+ Remote Administration'
+  changed_when: false
+
+- name: Ensure DCOM is enabled machine-wide
+  ansible.windows.win_regedit:
+    path: HKLM:\SOFTWARE\Microsoft\Ole
+    name: EnableDCOM
+    data: "Y"
+    type: string

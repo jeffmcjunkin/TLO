@@ -1,0 +1,12 @@
+---
+galaxy_info:
+  role_name: charlie_dcom_lateral
+  author: range author
+  description: Open the RPC/DCOM firewall on AREUBEN-WS so M3.1 DCOM lateral (dcomexec) works.
+  license: MIT
+  min_ansible_version: "2.12"
+  platforms:
+    - name: Windows
+      versions: [all]
+  galaxy_tags: [windows, dcom, lateral-movement]
+dependencies: []

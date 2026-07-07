@@ -135,7 +135,9 @@ ludus:
 
   - vm_name: "{{ range_id }}-charlie-ws1"
     hostname: "AREUBEN-WS"
-    template: win11-22h2-x64-enterprise-template
+    # Windows 10 (not 11): the depicted M3.1 "DCOM lateral" (dcomexec MMC20/ShellWindows)
+    # is blocked by Win11 22H2's remote-activation hardening. Win10 supports it.
+    template: win10-22h2-x64-enterprise-template
     vlan: 30
     ip_last_octet: 30
     ram_gb: 4
@@ -152,6 +154,7 @@ ludus:
       role: member
     roles:
       - ludus_local_users_and_groups   # Pro: add svc_helpdesk + helpdesk_admin to local Administrators (DCOM/relay)
+      - charlie_dcom_lateral           # CUSTOM: open RPC/DCOM firewall so M3.1 dcomexec lateral works
       - charlie_chrome_creds           # CUSTOM: seed reuben's saved Chrome login (DPAPI) for wiki (M3.2)
     role_vars:
       # M3.1 (DCOM lateral as svc_helpdesk) + M4.3 (relay helpdesk_admin's coerced
