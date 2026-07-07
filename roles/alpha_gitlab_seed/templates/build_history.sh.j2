@@ -11,6 +11,9 @@ set -euo pipefail
 
 BUILD_DIR="{{ alpha_gitlab_build_dir }}"
 REPO_URL="http://oauth2:{{ alpha_gitlab_pat }}@127.0.0.1/{{ alpha_gitlab_group }}/{{ alpha_gitlab_project }}.git"
+API="http://127.0.0.1/api/v4"
+PROJ="{{ alpha_gitlab_group | urlencode }}%2F{{ alpha_gitlab_project | urlencode }}"
+PAT="{{ alpha_gitlab_pat }}"
 
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
@@ -110,6 +113,16 @@ EOF
 git add -A
 git commit -q -m "Add GitLab CI pipeline"
 
-# ---------- push (force so re-runs are deterministic/idempotent) ----------
-git push -q -f "$REPO_URL" main
+# ---------- push ----------
+# GitLab's default-branch protection denies *force*-push to main (even the initial
+# one on a fresh repo), but the owner PAT may do a normal push to create it. So push
+# normally first; only on a re-run (branch exists / non-fast-forward) do we relax the
+# force-push protection via the API and force the rewritten history through.
+if ! git push -q "$REPO_URL" main 2>/dev/null; then
+  echo "normal push rejected (re-run) — enabling force-push on main, then forcing"
+  curl -s -o /dev/null --request PATCH \
+    "$API/projects/$PROJ/protected_branches/main?allow_force_push=true" \
+    --header "PRIVATE-TOKEN: $PAT" || true
+  git push -q -f "$REPO_URL" main
+fi
 echo "pushed crafted history to {{ alpha_gitlab_group }}/{{ alpha_gitlab_project }}"
