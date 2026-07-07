@@ -114,10 +114,11 @@ ludus:
       fqdn: charlie.local
       role: member
     roles:
-      - charlie_fs_share            # CUSTOM: IT$ (anon) + Backups shares, plant VPN notes + passwords.kdbx
-      - ludus_ghosts_client         # Pro: GHOSTS timeline auto-browses http://wiki.charlie.local (M4.2)
+      - charlie_fs_share            # CUSTOM: IT$/Backups shares + planted loot + victim auto-browser (M4.2)
     role_vars:
-      ghosts_browse_url: "http://wiki.charlie.local/books/it/page/vpn-runbook"
+      charlie_wiki_url: "http://wiki.charlie.local/books/it/page/vpn-runbook"
+      charlie_victim_user: helpdesk_admin
+      charlie_victim_password: "Helpdesk!Adm1n"
 
   - vm_name: "{{ range_id }}-charlie-wiki"
     hostname: "charlie-wiki"

