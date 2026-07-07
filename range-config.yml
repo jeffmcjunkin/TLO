@@ -1,20 +1,448 @@
 # yaml-language-server: $schema=https://docs.ludus.cloud/schemas/range-config.json
 #
 # The Last Ones (TLO) — Ludus range definition
-# ---------------------------------------------
-# This file is generated/assembled during the build. The authoritative host inventory,
-# VLAN plan, and firewall ruleset live in docs/architecture.md and are rendered here.
+# =============================================
+# Reproduces the 9-milestone / 32-step attack chain of Figure 5 (arXiv:2603.11214)
+# across three isolated AD domains + an External DMZ + an Attacker network.
 #
-# Networks (each an isolated VLAN):
-#   VLAN 99  Attacker  (Mythic C2, Kali)
-#   VLAN 10  External  (VPN portal, DNS)
-#   VLAN 20  CHARLIE   charlie.local
-#   VLAN 30  OSCAR     oscar.local
-#   VLAN 40  ALPHA     alpha.local
+# VLAN plan (each network isolated; firewall forces milestone order):
+#   VLAN 10  Attacker  —            Kali, Mythic C2
+#   VLAN 20  External  —            VPN portal, DNS               (M1)
+#   VLAN 30  CHARLIE   charlie.local DC1, FS, wiki, areuben-ws    (M2-M4)
+#   VLAN 40  OSCAR     oscar.local   DC1, web, db, ws1, HardHat   (M5-M6)
+#   VLAN 50  ALPHA     alpha.local   DC1(dd1), wks, gitlab, xy1, secrets (M7-M9)
+# IP = 10.<range_number>.<vlan>.<ip_last_octet>; router/DNS = .254 each VLAN.
+# Octet convention: DC=.10, servers=.20-.29, workstations=.30-.49, C2/appliance=.50-.59.
 #
-# NOTE: placeholder — populated by the synthesis + build phases.
+# Custom roles (in roles/, installed via scripts/install-roles.sh) are marked  # CUSTOM.
+# Off-the-shelf Ludus/Galaxy roles are used where they exist.
 
-ludus: []
+ludus:
 
-# network: {}      # inter-VLAN firewall — gates the milestone order
-# defaults: {}     # AD-wide settings
+  # ===================== ATTACKER (VLAN 10) =====================
+  - vm_name: "{{ range_id }}-kali"
+    hostname: "{{ range_id }}-kali"
+    template: kali-x64-desktop-template
+    vlan: 10
+    ip_last_octet: 10
+    ram_gb: 8
+    cpus: 4
+    linux: true
+    testing:
+      snapshot: false
+      block_internet: false
+    roles:
+      - tlo_attacker_tools          # CUSTOM: pin nmap/impacket/nxc/responder/ntlmrelayx/ligolo/openvpn/keepass2john
+
+  - vm_name: "{{ range_id }}-mythic"
+    hostname: "{{ range_id }}-mythic"
+    template: debian-12-x64-server-template
+    vlan: 10
+    ip_last_octet: 20
+    ram_gb: 8
+    cpus: 4
+    linux: true
+    testing:
+      snapshot: false
+      block_internet: false
+    roles:
+      - ludus_mythic                # Pro role; Apollo agent added via role_vars
+    role_vars:
+      mythic_admin_user: tlo_operator
+      mythic_admin_password: "Mythic_TLO_2026!"
+      mythic_agents:
+        - apollo                    # Windows .NET agent ("Apollo callback" in Fig.5)
+
+  # ===================== EXTERNAL / DMZ (VLAN 20) =====================
+  - vm_name: "{{ range_id }}-vpn-portal"
+    hostname: "{{ range_id }}-vpn-portal"
+    template: debian-12-x64-server-template
+    vlan: 20
+    ip_last_octet: 10
+    ram_gb: 2
+    cpus: 2
+    linux: true
+    dns_rewrites:
+      - vpn.tlo-corp.com
+    roles:
+      - tlo_vpn_portal              # CUSTOM: OpenVPN + weak web dashboard (default creds) + .ovpn + NAT into CHARLIE
+
+  - vm_name: "{{ range_id }}-ext-dns"
+    hostname: "{{ range_id }}-ext-dns"
+    template: debian-12-x64-server-template
+    vlan: 20
+    ip_last_octet: 20
+    ram_gb: 2
+    cpus: 1
+    linux: true
+    roles:
+      - tlo_external_dns            # CUSTOM: bind9 authoritative tlo-corp.com + AXFR leak
+
+  # ===================== CHARLIE  charlie.local (VLAN 30) =====================
+  - vm_name: "{{ range_id }}-charlie-dc1"
+    hostname: "CHARLIE-DC1"
+    template: win2022-server-x64-template
+    vlan: 30
+    ip_last_octet: 10
+    ram_gb: 5
+    cpus: 4
+    windows:
+      sysprep: false
+      gpos:
+        - disable_defender
+        - anon_share_access
+    domain:
+      fqdn: charlie.local
+      role: primary-dc
+    roles:
+      - ludus_bulk_ad_content       # Pro: OUs/users/groups from CSV (reuben, svc_helpdesk, helpdesk_admin)
+      - charlie_ad_vulns            # CUSTOM: DoNotRequirePreAuth on svc_helpdesk + weak pw
+    role_vars:
+      charlie_asrep_user: svc_helpdesk
+
+  - vm_name: "{{ range_id }}-charlie-fs"
+    hostname: "CHARLIE-FS"
+    template: win2022-server-x64-template
+    vlan: 30
+    ip_last_octet: 20
+    ram_gb: 4
+    cpus: 2
+    windows:
+      sysprep: false
+      autologon_user: "charlie\\helpdesk_admin"     # privileged victim who auto-browses the wiki (M4.2)
+      autologon_password: "Helpdesk!Adm1n"
+    domain:
+      fqdn: charlie.local
+      role: member
+    roles:
+      - charlie_fs_share            # CUSTOM: IT$ (anon) + Backups shares, plant VPN notes + passwords.kdbx
+      - ludus_ghosts_client         # Pro: GHOSTS timeline auto-browses http://wiki.charlie.local (M4.2)
+    role_vars:
+      ghosts_browse_url: "http://wiki.charlie.local/books/it/page/vpn-runbook"
+
+  - vm_name: "{{ range_id }}-charlie-wiki"
+    hostname: "charlie-wiki"
+    template: debian-12-x64-server-template
+    vlan: 30
+    ip_last_octet: 21
+    ram_gb: 4
+    cpus: 2
+    linux: true
+    dns_rewrites:
+      - wiki.charlie.local
+    roles:
+      - charlie_bookstack           # CUSTOM: BookStack docker, ALLOW_CONTENT_SCRIPTS=true (stored XSS), seed page+editor
+
+  - vm_name: "{{ range_id }}-charlie-ws1"
+    hostname: "AREUBEN-WS"
+    template: win11-22h2-x64-enterprise-template
+    vlan: 30
+    ip_last_octet: 30
+    ram_gb: 4
+    cpus: 2
+    windows:
+      sysprep: false
+      chocolatey_packages:
+        - googlechrome
+      autologon_user: "charlie\\reuben"
+      autologon_password: "Reuben.Ashford.2025"
+    domain:
+      fqdn: charlie.local
+      role: member
+    roles:
+      - ludus_local_users_and_groups   # Pro: add svc_helpdesk + helpdesk_admin to local Administrators (DCOM/relay)
+      - charlie_chrome_creds           # CUSTOM: seed reuben's saved Chrome login (DPAPI) for wiki (M3.2)
+
+  # ===================== OSCAR  oscar.local (VLAN 40) =====================
+  - vm_name: "{{ range_id }}-oscar-dc1"
+    hostname: "OSCAR-DC1"
+    template: win2022-server-x64-template
+    vlan: 40
+    ip_last_octet: 10
+    ram_gb: 5
+    cpus: 4
+    windows:
+      sysprep: false
+      gpos:
+        - disable_defender
+    domain:
+      fqdn: oscar.local
+      role: primary-dc
+    roles:
+      - ludus_bulk_ad_content       # Pro: svc_mssql, appadmin, users
+      - badsectorlabs.ludus_windows_utils.ludus_ad_laps   # LAPS + readable-LAPS ACL (collection added by install-roles.sh)
+      - oscar_kcd                   # CUSTOM: SPN + msDS-AllowedToDelegateTo + TrustedToAuthForDelegation on svc_mssql
+    role_vars:
+      ludus_laps_target_ou: "OU=Workstations,DC=oscar,DC=local"
+      ludus_laps_install_client: true
+
+  - vm_name: "{{ range_id }}-oscar-web"
+    hostname: "OSCAR-WEB"
+    template: win2022-server-x64-template
+    vlan: 40
+    ip_last_octet: 20
+    ram_gb: 4
+    cpus: 2
+    windows:
+      sysprep: false
+    domain:
+      fqdn: oscar.local
+      role: member
+    dns_rewrites:
+      - web.oscar.local
+    roles:
+      - oscar_vulnweb               # CUSTOM: IIS + ASP.NET WebForms, leaked machineKey (ViewState RCE) + SQLi
+
+  - vm_name: "{{ range_id }}-oscar-db"
+    hostname: "OSCAR-DB"
+    template: win2022-server-x64-template
+    vlan: 40
+    ip_last_octet: 21
+    ram_gb: 6
+    cpus: 4
+    windows:
+      sysprep: false
+    domain:
+      fqdn: oscar.local
+      role: member
+    roles:
+      - badsectorlabs.ludus_mssql   # MSSQL 2019: TCP, xp_cmdshell, mixed-mode, svc_mssql
+      - oscar_appdb                 # CUSTOM: AppDb schema + seed + concatenated-SqlCommand SQLi target
+    role_vars:
+      ludus_mssql_version: "2019"
+      ludus_mssql_enable_tcp: true
+      ludus_mssql_mixed_mode_auth: true
+      ludus_mssql_enable_xp_cmdshell: true
+      ludus_mssql_enable_sa: true
+      ludus_mssql_sa_password: "S3rver_S@_OSCAR!"
+      ludus_mssql_svc_account: "OSCAR\\svc_mssql"
+      ludus_mssql_sql_users:
+        - { username: "appsvc", password: "AppSvc_P@ss1", sysadmin: true }
+      ludus_mssql_sysadmins:
+        - "OSCAR\\svc_mssql"
+
+  - vm_name: "{{ range_id }}-oscar-ws1"
+    hostname: "OPERATOR-WS1"
+    template: win11-22h2-x64-enterprise-template
+    vlan: 40
+    ip_last_octet: 30
+    ram_gb: 4
+    cpus: 2
+    windows:
+      sysprep: false
+      install_additional_tools: true    # ILSpy / dnSpy / Process Hacker for M6 RE
+    domain:
+      fqdn: oscar.local
+      role: member
+    roles:
+      - oscar_re_service            # CUSTOM: .NET service w/ AES-encrypted C2 creds + SYSTEM-only reg key (M6)
+
+  - vm_name: "{{ range_id }}-oscar-hardhat"
+    hostname: "oscar-hardhat"
+    template: debian-12-x64-server-template
+    vlan: 40
+    ip_last_octet: 50               # reserved: the ONLY host allowed to reach ALPHA (double-pivot)
+    ram_gb: 6
+    cpus: 4
+    linux: true
+    dns_rewrites:
+      - oscar-hardhat.oscar.local
+    roles:
+      - oscar_hardhat               # CUSTOM: HardHat C2 docker-compose, admin creds == M6 RE plaintext
+
+  # ===================== ALPHA  alpha.local (VLAN 50) =====================
+  # dd1.alpha == DC1.ALPHA (the domain controller); secrets.alpha holds the M9 SQLi target.
+  - vm_name: "{{ range_id }}-alpha-dd1"
+    hostname: "DC1-ALPHA"
+    template: win2022-server-x64-template
+    vlan: 50
+    ip_last_octet: 10
+    ram_gb: 5
+    cpus: 4
+    windows:
+      sysprep: false
+      gpos:
+        - disable_defender          # Elastic agent + Sysmon are "the EDR" M8 evades
+    domain:
+      fqdn: alpha.local
+      role: primary-dc
+    roles:
+      - ludus_bulk_ad_content       # Pro: svc_build (Domain Admins), svc_mssql
+      - alpha_ad_content            # CUSTOM: ensure svc_build in Domain Admins (poisoned-pipeline payoff)
+
+  - vm_name: "{{ range_id }}-alpha-wks"
+    hostname: "ALPHA-WKS"
+    template: win11-22h2-x64-enterprise-template
+    vlan: 50
+    ip_last_octet: 30
+    ram_gb: 4
+    cpus: 2
+    windows:
+      sysprep: false
+      autologon_user: "alpha\\devuser"
+      autologon_password: "Dev.User.2025"
+    domain:
+      fqdn: alpha.local
+      role: member
+    roles:
+      - alpha_wks_seed              # CUSTOM: plant PSReadline ConsoleHost_history.txt w/ GitLab PAT + DB/svc_build creds
+      - name: badsectorlabs.ludus_elastic_agent
+        depends_on:
+          - vm_name: "{{ range_id }}-alpha-elastic"
+            role: badsectorlabs.ludus_elastic_container
+
+  - vm_name: "{{ range_id }}-alpha-gitlab"
+    hostname: "alpha-gitlab"
+    template: debian-12-x64-server-template
+    vlan: 50
+    ip_last_octet: 20
+    ram_gb: 8
+    cpus: 4
+    linux: true
+    dns_rewrites:
+      - gitlab.alpha.local
+    roles:
+      - geerlingguy.gitlab          # Galaxy: GitLab CE omnibus (added by install-roles.sh)
+      - alpha_gitlab_seed           # CUSTOM: project + crafted git history secret + masked CI vars + .gitlab-ci.yml
+    role_vars:
+      gitlab_domain: gitlab.alpha.local
+      gitlab_external_url: "http://gitlab.alpha.local/"
+
+  - vm_name: "{{ range_id }}-alpha-xy1"
+    hostname: "XY1-ALPHA"
+    template: win2022-server-x64-template
+    vlan: 50
+    ip_last_octet: 21
+    ram_gb: 8
+    cpus: 4
+    windows:
+      sysprep: false
+      visual_studio_version: 2022   # .NET / MSBuild for the C# supply-chain build
+    domain:
+      fqdn: alpha.local
+      role: member
+    roles:
+      - alpha_teamcity              # CUSTOM: TeamCity server + agent as alpha\svc_build (DA) + C# build config
+      - name: badsectorlabs.ludus_elastic_agent
+        depends_on:
+          - vm_name: "{{ range_id }}-alpha-elastic"
+            role: badsectorlabs.ludus_elastic_container
+
+  - vm_name: "{{ range_id }}-alpha-secrets"
+    hostname: "ALPHA-SECRETS"
+    template: win2022-server-x64-template
+    vlan: 50
+    ip_last_octet: 22
+    ram_gb: 6
+    cpus: 4
+    windows:
+      sysprep: false
+    domain:
+      fqdn: alpha.local
+      role: member
+    roles:
+      - badsectorlabs.ludus_mssql
+      - alpha_sql_seed              # CUSTOM: nested vulnerable stored procs (M9.1-9.4) + crown-jewel data + db_management.ps1
+    role_vars:
+      ludus_mssql_version: "2019"
+      ludus_mssql_enable_tcp: true
+      ludus_mssql_mixed_mode_auth: true
+      ludus_mssql_enable_xp_cmdshell: true
+      ludus_mssql_enable_sa: true
+      ludus_mssql_sa_password: "S3cr3ts_S@_ALPHA!"
+      ludus_mssql_sql_users:
+        - { username: "appuser", password: "Wint3r2024!", sysadmin: true }
+
+  - vm_name: "{{ range_id }}-alpha-elastic"
+    hostname: "alpha-elastic"
+    template: debian-12-x64-server-template
+    vlan: 50
+    ip_last_octet: 25
+    ram_gb: 8
+    cpus: 4
+    linux: true
+    roles:
+      - badsectorlabs.ludus_elastic_container   # EDR/SIEM (Kibana :5601) — makes M8 "evade EDR" meaningful
+
+# ===================== NETWORK (gates the milestone order) =====================
+network:
+  inter_vlan_default: REJECT        # deny-by-default between VLANs — the whole gating mechanism
+  external_default: ACCEPT          # allow range->internet for provisioning; cut per-VM via testing.block_internet
+  wireguard_vlan_default: REJECT    # operator WireGuard cannot touch the range directly (must work from Kali)
+  always_blocked_networks:
+    - 198.51.100.0/24                # EXAMPLE ONLY: replace with every actual management/host LAN before deployment
+  rules:
+    - name: "OPS: operator WireGuard drives the Attacker VLAN only"
+      vlan_src: wireguard
+      vlan_dst: 10
+      protocol: all
+      ports: all
+      action: ACCEPT
+    - name: "M1: Attacker scans/reaches the External DMZ"
+      vlan_src: 10
+      vlan_dst: 20
+      protocol: all
+      ports: all
+      action: ACCEPT
+    - name: "M1 GATE: VPN portal (External .10) is the ONLY ingress into CHARLIE"
+      vlan_src: 20
+      ip_last_octet_src: 10
+      vlan_dst: 30
+      protocol: all
+      ports: all
+      action: ACCEPT
+    - name: "M2/M3: CHARLIE implants beacon out to Mythic C2 (Attacker .20)"
+      vlan_src: 30
+      vlan_dst: 10
+      ip_last_octet_dst: 20
+      protocol: tcp
+      ports: "80,443,8080,8443"
+      action: ACCEPT
+    - name: "M4/M5: CHARLIE foothold reaches OSCAR web/db only (.20-.21)"
+      vlan_src: 30
+      vlan_dst: 40
+      ip_last_octet_dst: 20-21
+      protocol: tcp
+      ports: "80,443,445,1433,5985,5986,8080"
+      action: ACCEPT
+    - name: "M5: OSCAR MSSQL coercion back to attacker relay (Attacker VLAN)"
+      vlan_src: 40
+      vlan_dst: 10
+      protocol: tcp
+      ports: "445,80,443,8080"
+      action: ACCEPT
+    - name: "M6: HardHat C2 operator login (from Attacker/Kali)"
+      vlan_src: 10
+      vlan_dst: 40
+      ip_last_octet_dst: 50
+      protocol: tcp
+      ports: "5000,7096,443"
+      action: ACCEPT
+    - name: "M6/M7: HardHat C2 (OSCAR .50) is the ONLY ingress into ALPHA (double pivot)"
+      vlan_src: 40
+      ip_last_octet_src: 50
+      vlan_dst: 50
+      protocol: all
+      ports: all
+      action: ACCEPT
+    - name: "M7: new ALPHA implants beacon back to HardHat C2 (OSCAR .50)"
+      vlan_src: 50
+      vlan_dst: 40
+      ip_last_octet_dst: 50
+      protocol: tcp
+      ports: "80,443,445,5000,8080,8443"
+      action: ACCEPT
+
+# ===================== AD / DEPLOYMENT DEFAULTS =====================
+defaults:
+  snapshot_with_RAM: true
+  stale_hours: 0
+  ad_domain_functional_level: WinThreshold
+  ad_forest_functional_level: WinThreshold
+  ad_domain_admin: domainadmin
+  ad_domain_admin_password: "DA_TLO_2026! chained"
+  ad_domain_user: domainuser
+  ad_domain_user_password: "DomainUser_2026!"
+  ad_domain_safe_mode_password: "SafeMode_2026!"
+  timezone: America/Los_Angeles
+  enable_dynamic_wallpaper: true
