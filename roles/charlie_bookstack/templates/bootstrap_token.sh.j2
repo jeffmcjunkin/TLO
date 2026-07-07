@@ -11,6 +11,10 @@ DB_CTR='{{ charlie_bookstack_db_name_container }}'
 APP_CTR='{{ charlie_bookstack_name }}'
 DB='{{ charlie_bookstack_db_database }}'
 ROOTPW='{{ charlie_bookstack_db_root_password }}'
+# linuxserver/mariadb sets root@localhost to unix_socket auth (password auth is
+# denied), so use the app DB user (password-authed, full rights on this DB).
+DB_USER='{{ charlie_bookstack_db_user }}'
+DB_PASS='{{ charlie_bookstack_db_password }}'
 ADMIN_EMAIL='{{ charlie_bookstack_admin_email }}'
 ADMIN_PW='{{ charlie_bookstack_admin_password }}'
 TOKEN_ID='{{ charlie_bookstack_api_token_id }}'
@@ -19,9 +23,9 @@ TOKEN_NAME='{{ charlie_bookstack_api_token_name }}'
 
 # Pick whichever mysql client the mariadb image ships.
 if docker exec "$DB_CTR" sh -c 'command -v mariadb' >/dev/null 2>&1; then
-  MYSQL="docker exec -i $DB_CTR mariadb -uroot -p$ROOTPW $DB"
+  MYSQL="docker exec -i $DB_CTR mariadb -u$DB_USER -p$DB_PASS $DB"
 else
-  MYSQL="docker exec -i $DB_CTR mysql -uroot -p$ROOTPW $DB"
+  MYSQL="docker exec -i $DB_CTR mysql -u$DB_USER -p$DB_PASS $DB"
 fi
 
 # bcrypt hashes computed by the app container's PHP (matches Laravel Hash).
