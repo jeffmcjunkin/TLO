@@ -84,7 +84,7 @@
 
 # --- logon scheduled task, running AS reuben --------------------------------
 - name: Create logon task to seed reuben's Chrome cred (runs as reuben)
-  ansible.windows.win_scheduled_task:
+  community.windows.win_scheduled_task:   # win_scheduled_task is in community.windows, not ansible.windows
     name: "{{ charlie_chrome_task_name }}"
     description: "Seed reuben's saved Chrome login for the wiki (TLO M3.2)."
     actions:
