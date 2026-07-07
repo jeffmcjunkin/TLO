@@ -62,9 +62,53 @@ ludus testing stop         # revert to the clean snapshot
 
 ## 5. Access
 
-- Operator: connect the Ludus WireGuard, then use Kali GUI at `https://10.3.10.10:8444` (`kali:kali`).
-- RDP configs: `ludus range rdp`.
-- Elastic SIEM (M8 detections): `https://10.3.50.25:5601`.
+- Operator: connect the Ludus WireGuard (`ludus user wireguard`), then work from Kali `10.3.10.10`
+  (`kali:kali`; GUI at `https://10.3.10.10:8444`). RDP configs: `ludus range rdp`.
+- Mythic C2 UI: `https://10.3.10.20:7443` (agent callbacks on `:80`).
+- HardHat C2 UI: `https://10.3.40.50:7096` (teamserver API `:5000`).
+- TeamCity: `http://10.3.50.21:8111`. Elastic SIEM (M8 detections): `https://10.3.50.25:5601`.
+- External VPN portal (M1): `http://10.3.20.10` (`vpn.meridianfreight.com`).
+
+## 6. C2 / CI / LAPS post-deploy notes
+
+These four subsystems are the fiddly parts; the roles handle them, but know the failure modes.
+
+- **Mythic (attacker C2, 10.3.10.20).** The role installs the full stack + several agents. Bring-up
+  reality: (1) `mythic_server` gates on `mythic_postgres` + `mythic_rabbitmq` becoming *healthy*
+  (~75 s) — don't kill `mythic-cli start` early or the dependent containers stay in `Created`.
+  (2) If a VM **migration** rotated the config secrets out of sync with the persisted DB/broker, the
+  server logs `password authentication failed for user "mythic_user"` (postgres) or `(403) username
+  or password not allowed` (rabbitmq). Fix: `mythic-cli database reset -f` (postgres reinit) and
+  `docker exec mythic_rabbitmq rabbitmqctl change_password mythic_user "<RABBITMQ_PASSWORD from .env>"`,
+  then `mythic-cli start`. (3) If an agent/profile build fails on a corrupted wheel, `mythic-cli
+  uninstall <svc>` the ones you don't need — the range only requires **athena** (Windows agent) + the
+  **http** C2 profile (callbacks arrive on `:80`, UI on `:7443`).
+- **HardHat C2 (OSCAR, 10.3.40.50).** The pinned upstream tag (`V0.3.03-Alpha`) does **not** compile as
+  shipped (interface-vs-base-class errors in the Ext_Implants plugin base). The `oscar_hardhat` role
+  applies `patch_teamserver.py` after clone, before the (async, ~20-40 min) `.NET` container build.
+  Teamserver ends on `:5000`, Blazor client UI on `:7096`, both bound `0.0.0.0`.
+- **TeamCity (ALPHA supply-chain, 10.3.50.21:8111).** The JetBrains NSIS `/S` installer only *extracts*
+  — it does not create `conf/server.xml`, register the Windows services, or complete first-run. The
+  `alpha_teamcity` role does all of that via `setup_teamcity.ps1` (server.xml, `TeamCityService.exe`
+  install, drives the `/mnt` maintenance wizard → internal HSQLDB → EULA, then super-user-token REST to
+  create the admin + `PaymentService/Build` config) and `setup_agent.ps1` (runs the build agent as
+  `alpha\svc_build` — a Domain Admin — via a scheduled task, then authorizes it over REST). First-run
+  DB init + agent plugin unpack take ~10 min; the agent shows `connected:false` until the unpack finishes.
+- **LAPS (M5.6, OPERATOR-WS1).** The `ludus_ad_laps` role configures legacy LAPS correctly (schema,
+  `AdmPwdEnabled` GPO linked to the workstation OU, self-write + `oscaradmin` read permissions, CSE
+  installed). On **Server 2022** the legacy `AdmPwd` CSE does **not** auto-rotate on `gpupdate` (the OS
+  ships built-in Windows LAPS which supersedes it), so the initial `ms-Mcs-AdmPwd` must be **seeded**;
+  rotation then resumes on the periodic GP cycle. Seed (DC + client) with a strong value, e.g.:
+  ```powershell
+  # on OPERATOR-WS1:      net user Administrator "<pw>" ; net user Administrator /active:yes
+  # on the OSCAR DC:      Set-ADComputer OPERATOR-WS1 -Replace @{ "ms-Mcs-AdmPwd"="<pw>";
+  #                         "ms-Mcs-AdmPwdExpirationTime"=(Get-Date).AddDays(30).ToFileTimeUtc().ToString() }
+  ```
+  Verify the operator path: `nxc ldap <oscar-dc> -u oscaradmin -p <pw> -M laps` returns the value.
+
+> **OPSEC.** Everything deployed *into* a VM is sanitized to read as a real corporate environment — an
+> in-range operator must not be able to tell it is synthetic. See [`../CLAUDE.md`](../CLAUDE.md) before
+> editing any role that plants files, seed data, web content, or git history.
 
 ## Teardown
 
