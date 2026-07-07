@@ -40,8 +40,8 @@
   poll: 0              # do NOT block the deploy on the build
   register: _hh_build
 
-- name: Wait (best-effort) for the HardHat teamserver port
+- name: Note the HardHat teamserver port (non-blocking; the .NET build finishes async)
   ansible.builtin.wait_for:
     port: "{{ hardhat_teamserver_port }}"
-    timeout: 600
+    timeout: 15
   ignore_errors: true   # build may still be compiling; validation re-checks. Deploy must not block on it.
