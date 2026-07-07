@@ -77,6 +77,13 @@ ludus range rm-range       # delete the range entirely
 
 - **SDN apply timeout on deploy/create** — a cluster node is unhealthy; check `pvecm status` and node
   reachability, recover the node, retry.
+- **Early `Timeout when waiting for <ip>:5986` / range unreachable from the server (cluster mode)** — if
+  the first host times out on WinRM but the VM pings/`nc`s fine *from its own node*, the Ludus server is
+  likely missing the range route. In cluster mode, when the range router VM lands on a node other than the
+  server node, the `10.<N>.0.0/16` route may not get installed on the server. Check `ip route | grep 10.<N>`
+  on the server; if absent, add it via the router's ludusnat IP and redeploy:
+  `ip route replace 10.<N>.0.0/16 via 192.0.2.10<N> dev ludusnat` (find the router IP with
+  `qm agent <router-vmid> network-get-interfaces`). Observed with TLO (range 3, router on a peer node).
 - **A role fails** — `ludus range errors`, then `ludus range deploy --only-roles <name> -v`.
 - **Domain-joined Windows can't resolve** — expected if its DC has `block_internet` mismatched; see the
   testing notes in the Ludus docs.
