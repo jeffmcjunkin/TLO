@@ -34,7 +34,7 @@
     src: seed_root_and_token.rb.j2
     dest: /tmp/tlo_seed_root_and_token.rb
     owner: root
-    mode: "0600"
+    mode: "0644"          # gitlab-rails runner executes as the git user, which must be able to read the file
 
 - name: Run gitlab-rails seed (root pw + deterministic PAT)
   ansible.builtin.command: gitlab-rails runner /tmp/tlo_seed_root_and_token.rb
