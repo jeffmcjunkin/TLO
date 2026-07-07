@@ -214,6 +214,7 @@ ludus:
       ludus_mssql_mixed_mode_auth: true
       ludus_mssql_enable_xp_cmdshell: true
       ludus_mssql_enable_sa: true
+      ludus_mssql_install_ssms: false   # skip SSMS (GUI-only, unused by the chain; /passive hangs under WinRM)
       ludus_mssql_sa_password: "S3rver_S@_OSCAR!"
       # NOTE: ludus_mssql can't set a domain-svc-account password, so SQL installs as the
       # default account; oscar_appdb then switches the service to svc_mssql (SMO SetServiceAccount)
@@ -350,6 +351,7 @@ ludus:
       ludus_mssql_mixed_mode_auth: true
       ludus_mssql_enable_xp_cmdshell: true
       ludus_mssql_enable_sa: true
+      ludus_mssql_install_ssms: false   # skip SSMS (GUI-only, unused by the chain; /passive hangs under WinRM)
       ludus_mssql_sa_password: "S3cr3ts_S@_ALPHA!"
       ludus_mssql_sql_users:
         - { username: "appuser", password: "Wint3r2024!", sysadmin: true }
