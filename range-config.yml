@@ -171,10 +171,12 @@ ludus:
       role: primary-dc
     roles:
       - oscar_kcd                   # CUSTOM: owns oscar.local accounts (svc_mssql, oscaradmin) + Workstations OU + constrained delegation (runs first)
-      - badsectorlabs.ludus_windows_utils.ludus_ad_laps   # LAPS + readable-LAPS ACL (collection added by install-roles.sh)
+      - badsectorlabs.ludus_windows_utils.ludus_ad_laps   # LAPS schema+GPO+delegation on the DC (collection via install-roles.sh)
     role_vars:
-      ludus_laps_target_ou: "OU=Workstations,DC=oscar,DC=local"
-      ludus_laps_install_client: true
+      ludus_laps_ou: "OU=Workstations,DC=oscar,DC=local"   # OPERATOR-WS1's OU; GPO links here
+      ludus_laps_gpo_name: "LAPS Policy"
+      ludus_laps_readers:                                  # readable-LAPS delegate → the S4U-impersonated DA (M5.5→5.6)
+        - "oscaradmin"
 
   - vm_name: "{{ range_id }}-oscar-web"
     hostname: "OSCAR-WEB"
@@ -239,6 +241,10 @@ ludus:
       role: member
     roles:
       - oscar_re_service            # CUSTOM: .NET service w/ AES-encrypted C2 creds + SYSTEM-only reg key (M6)
+      - badsectorlabs.ludus_windows_utils.ludus_ad_laps   # LAPS client: install CSE + move OPERATOR-WS1 into the LAPS OU (managed pw)
+    role_vars:
+      ludus_laps_client_only: true
+      ludus_laps_ou: "OU=Workstations,DC=oscar,DC=local"
 
   - vm_name: "{{ range_id }}-oscar-hardhat"
     hostname: "oscar-hardhat"
