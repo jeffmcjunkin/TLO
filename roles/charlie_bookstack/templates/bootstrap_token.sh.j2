@@ -48,4 +48,16 @@ WHERE u.email = '${ADMIN_EMAIL}'
   AND NOT EXISTS (SELECT 1 FROM api_tokens t WHERE t.token_id = '${TOKEN_ID}');
 SQL
 
+{% if charlie_bookstack_public_access | default(true) %}
+# Enable public (guest) read access so an unauthenticated viewer (the victim's
+# browser, which holds no session) can render pages instead of being 302'd to
+# /login. Stored as the `app-public` setting; the built-in Public role already
+# grants content-view. Idempotent upsert.
+$MYSQL <<SQL
+INSERT INTO settings (setting_key, value, type, created_at, updated_at)
+VALUES ('app-public', 'true', 'boolean', NOW(), NOW())
+ON DUPLICATE KEY UPDATE value = 'true';
+SQL
+{% endif %}
+
 echo "bootstrap_token: ok"

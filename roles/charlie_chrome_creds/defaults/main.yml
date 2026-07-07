@@ -16,22 +16,20 @@ charlie_wiki_login_url: "http://wiki.charlie.local/login"
 charlie_wiki_editor_email: "reuben@charlie.local"
 charlie_wiki_editor_password: "Reuben.Wiki.2025!"
 
-# reuben (AREUBEN-WS autologon user) -- whose vault we seed.
+# reuben (AREUBEN-WS autologon user) -- whose profile we seed.
 charlie_chrome_reuben_user: reuben
 charlie_chrome_reuben_domain: charlie      # NetBIOS
 
-# staging dir for helper + fallback assets on the host
+# staging dir for the injector + logon wrapper on the host
 charlie_chrome_stage_dir: 'C:\ProgramData\ChromeSync'
 
-# --- PRIMARY: real DPAPI/AES-GCM injection into Login Data ------------------
-# Disables App-Bound Encryption so Chrome uses the classic DPAPI-wrapped AES key
-# (dumpable by SharpChrome), then a logon task (as reuben) injects a v10 row.
-charlie_chrome_use_dpapi_injection: true
-charlie_chrome_install_python: true        # install python + pycryptodome for the injector
+# The secret is handed to reuben's logon wrapper as a machine-protected
+# (DPAPI / LOCAL_MACHINE) blob so the plaintext is never written to disk. The
+# wrapper decrypts it, injects the credential, self-verifies, then deletes it.
+charlie_chrome_secret_file: 'profile.dat'
 
-# --- FALLBACKS (always shipped; belt-and-suspenders) ------------------------
-charlie_chrome_credman: true               # cmdkey generic cred in reuben's vault
-charlie_chrome_desktop_csv: true           # Chrome-importable CSV on reuben's Desktop
+# install python + pycryptodome for the injector
+charlie_chrome_install_python: true
 
 # scheduled task name
 charlie_chrome_task_name: "ChromeProfileSync"

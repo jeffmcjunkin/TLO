@@ -1,68 +1,78 @@
 # {{ ansible_managed }}
 # Runs AS {{ charlie_chrome_reuben_domain }}\{{ charlie_chrome_reuben_user }} at
-# logon (autologon). Restores the saved Chrome sign-in for the internal wiki.
-# Best effort: the primary DPAPI write may fail on some Chrome builds, so the
-# CSV + Credential Manager fallbacks always run.
+# logon (autologon) and restores the saved Chrome sign-in for the internal wiki.
+#
+# The secret is read from a machine-protected blob (never stored in the clear);
+# the profile is created if missing, the credential is written into Chrome's
+# Login Data, the result is verified, and the transient blob is then removed.
+# Idempotent: once the credential is recoverable, subsequent logons do nothing.
 $ErrorActionPreference = 'Continue'
-$log = Join-Path $env:LOCALAPPDATA 'chrome_signin_sync.log'
+$log = Join-Path $env:LOCALAPPDATA 'chrome_profile_sync.log'
 function Log([string]$m) { "{0}  {1}" -f (Get-Date -Format o), $m | Out-File -Append -Encoding utf8 $log }
-Log "=== chrome sign-in sync start (user=$env:USERNAME) ==="
+Log "profile sync start (user=$env:USERNAME)"
 
 $stage = '{{ charlie_chrome_stage_dir }}'
 $py    = '{{ charlie_chrome_python_exe | default("python") }}'
+$inj   = Join-Path $stage 'seed_chrome_cred.py'
+$blob  = Join-Path $stage '{{ charlie_chrome_secret_file }}'
 $url   = '{{ charlie_wiki_login_url }}'
 $realm = '{{ charlie_wiki_url }}/'
 $user  = '{{ charlie_wiki_editor_email }}'
-$pass  = '{{ charlie_wiki_editor_password }}'
 
-$udir       = Join-Path $env:LOCALAPPDATA 'Google\Chrome\User Data'
-$localstate = Join-Path $udir 'Local State'
+$udir = Join-Path $env:LOCALAPPDATA 'Google\Chrome\User Data'
+$ls   = Join-Path $udir 'Local State'
+$ld   = Join-Path $udir 'Default\Login Data'
 $chrome = @(
   "$env:ProgramFiles\Google\Chrome\Application\chrome.exe",
   "${env:ProgramFiles(x86)}\Google\Chrome\Application\chrome.exe",
   "$env:LOCALAPPDATA\Google\Chrome\Application\chrome.exe"
 ) | Where-Object { Test-Path $_ } | Select-Object -First 1
 
-# 1) close Chrome so the Login Data SQLite DB is unlocked
+# Already done? (recoverable credential present) -> tidy up and stop.
+$already = & $py $inj --url $url --username $user --verify-only 2>&1
+if ($already -match 'verify-ok') {
+  Remove-Item -Force $blob -ErrorAction SilentlyContinue
+  Log "credential already present; nothing to do"
+  return
+}
+
+# 1) Chrome must be closed for the Login Data SQLite DB to be writable.
 Get-Process chrome -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 Start-Sleep -Seconds 2
 
-{% if charlie_chrome_use_dpapi_injection %}
-# 2) ensure the profile exists (Local State + Login Data) by launching Chrome once
-if ((-not (Test-Path $localstate)) -and $chrome) {
-  Log "profile missing -> launching Chrome headless once to create it"
-  # No --user-data-dir: Chrome's default profile IS this path, which is what we seed.
-  Start-Process -FilePath $chrome -ArgumentList '--headless=new','--disable-gpu','--no-first-run','--no-default-browser-check','about:blank'
-  Start-Sleep -Seconds 12
-  Get-Process chrome -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-  Start-Sleep -Seconds 2
+# 2) Ensure the profile exists with an initialised Login Data schema. A brief
+#    real (non-headless) launch reliably creates Local State + Login Data.
+$sz = if (Test-Path $ld) { (Get-Item $ld).Length } else { 0 }
+if ((-not (Test-Path $ls)) -or (-not (Test-Path $ld)) -or ($sz -lt 30000)) {
+  if ($chrome) {
+    Log "creating Chrome profile"
+    Start-Process -FilePath $chrome -ArgumentList '--no-first-run','--no-default-browser-check','--disable-sync','--disable-features=Translate','about:blank' | Out-Null
+    for ($i = 0; $i -lt 60; $i++) {
+      Start-Sleep -Milliseconds 500
+      $s2 = if (Test-Path $ld) { (Get-Item $ld).Length } else { 0 }
+      if ((Test-Path $ls) -and $s2 -ge 40000) { break }
+    }
+    Start-Sleep -Seconds 3
+    Get-Process chrome -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 3
+  } else {
+    Log "chrome.exe not found; cannot create profile"
+  }
 }
 
-# 3) PRIMARY: DPAPI/AES-GCM injection into Login Data
-try {
-  $out = & $py (Join-Path $stage 'seed_chrome_cred.py') --url $url --realm $realm --username $user --password $pass 2>&1
-  $out | ForEach-Object { Log "injector: $_" }
-  Log "injector exit=$LASTEXITCODE"
-} catch {
-  Log "injector EXCEPTION: $_"
+# 3) Inject the credential, then self-verify and drop the transient secret.
+if (Test-Path $blob) {
+  $out = & $py $inj --url $url --realm $realm --username $user --password-file $blob 2>&1
+  $out | ForEach-Object { Log "inject: $_" }
+  $ver = & $py $inj --url $url --username $user --password-file $blob --verify-only 2>&1
+  $ver | ForEach-Object { Log "verify: $_" }
+  if ($ver -match 'verify-ok') {
+    Remove-Item -Force $blob -ErrorAction SilentlyContinue
+    Log "verified; secret removed"
+  } else {
+    Log "verification did not confirm the credential"
+  }
+} else {
+  Log "secret material not present; skipping injection"
 }
-{% endif %}
-
-{% if charlie_chrome_credman %}
-# 4) FALLBACK A: Credential Manager entry in reuben's vault
-try {
-  cmdkey /generic:"{{ charlie_wiki_url }}" /user:"$user" /pass:"$pass" | Out-Null
-  Log "cmdkey generic credential added"
-} catch { Log "cmdkey error: $_" }
-{% endif %}
-
-{% if charlie_chrome_desktop_csv %}
-# 5) FALLBACK B: Chrome-importable CSV on the Desktop
-try {
-  $desktop = [Environment]::GetFolderPath('Desktop')
-  Copy-Item -Force (Join-Path $stage 'chrome-passwords.csv') (Join-Path $desktop 'chrome-passwords.csv')
-  Log "csv dropped to $desktop"
-} catch { Log "csv error: $_" }
-{% endif %}
-
-Log "=== chrome sign-in sync done ==="
+Log "profile sync done"

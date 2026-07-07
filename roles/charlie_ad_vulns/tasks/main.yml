@@ -144,3 +144,18 @@
     enabled: true
     state: present
   when: charlie_create_webed | bool
+
+# =============================================================================
+# DNS: the BookStack wiki host is a non-domain-joined Linux VM, so no A record
+# auto-registers in the AD zone. Add it so domain members (AREUBEN-WS, CHARLIE-FS)
+# resolve wiki.charlie.local — the M3.2 Chrome cred + M4 victim browse depend on it.
+# =============================================================================
+- name: Ensure wiki A record in {{ charlie_fqdn }}
+  ansible.windows.win_shell: |
+    $r = Get-DnsServerResourceRecord -ZoneName {{ charlie_fqdn }} -Name wiki -RRType A -ErrorAction SilentlyContinue
+    if (-not $r) {
+      Add-DnsServerResourceRecordA -ZoneName {{ charlie_fqdn }} -Name wiki -IPv4Address {{ charlie_wiki_ip }} -AllowUpdateAny
+      Write-Output "ADDED"
+    } else { Write-Output "EXISTS" }
+  register: _wiki_dns
+  changed_when: "'ADDED' in _wiki_dns.stdout"

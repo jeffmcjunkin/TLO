@@ -15,7 +15,7 @@ alpha_gitlab_root_password: "Root.GitLab.2025!"   # known root password (lab)
 # Must equal `alpha_gitlab_pat` in alpha_wks_seed (leaked in PSReadline history)
 # AND the value hardcoded-then-removed in the crafted git history below. Only
 # `gitlab-rails runner ... set_token` can force a specific token value.
-alpha_gitlab_pat: "glpat-TLOtoken0123456789ab"
+alpha_gitlab_pat: "glpat-x7Kp9mNqR2vWzY4bT6cD"
 alpha_gitlab_pat_name: "ci-bootstrap"
 
 # ---- Group / project ----

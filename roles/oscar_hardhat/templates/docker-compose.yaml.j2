@@ -11,6 +11,12 @@ services:
     image: hardhat_server
     container_name: hardhat_server
     restart: unless-stopped
+    # Seed the first-run administrator deterministically. On an empty database the
+    # teamserver reads these on startup (UsersRolesDatabaseService.CreateDefaultAdmin)
+    # instead of generating a random password, so the credential is known and stable.
+    environment:
+      HARDHAT_ADMIN_USERNAME: "{{ hardhat_admin_user }}"
+      HARDHAT_ADMIN_PASSWORD: "{{ hardhat_admin_password }}"
     ports:
       - "0.0.0.0:{{ hardhat_teamserver_port }}:5000"
     volumes:

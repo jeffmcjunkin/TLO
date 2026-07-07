@@ -153,6 +153,14 @@ ludus:
     roles:
       - ludus_local_users_and_groups   # Pro: add svc_helpdesk + helpdesk_admin to local Administrators (DCOM/relay)
       - charlie_chrome_creds           # CUSTOM: seed reuben's saved Chrome login (DPAPI) for wiki (M3.2)
+    role_vars:
+      # M3.1 (DCOM lateral as svc_helpdesk) + M4.3 (relay helpdesk_admin's coerced
+      # auth here) both require these domain accounts to be local admins on AREUBEN-WS.
+      ludus_local_groups:
+        - name: Administrators
+          members:
+            - "charlie\\svc_helpdesk"
+            - "charlie\\helpdesk_admin"
 
   # ===================== OSCAR  oscar.local (VLAN 40) =====================
   - vm_name: "{{ range_id }}-oscar-dc1"
@@ -408,6 +416,15 @@ network:
       ip_last_octet_dst: 20
       protocol: tcp
       ports: "80,443,8080,8443"
+      action: ACCEPT
+    - name: "M4: CHARLIE victim's coerced NTLM reaches the attacker relay (Kali .10)"
+      # helpdesk_admin's browser is coerced by the planted wiki payload; ntlmrelayx on
+      # Kali listens on SMB/HTTP/LDAP to relay it. Without this the relay is unreachable.
+      vlan_src: 30
+      vlan_dst: 10
+      ip_last_octet_dst: 10
+      protocol: tcp
+      ports: "80,443,445,389"
       action: ACCEPT
     - name: "M4/M5: CHARLIE foothold reaches OSCAR web/db only (.20-.21)"
       vlan_src: 30

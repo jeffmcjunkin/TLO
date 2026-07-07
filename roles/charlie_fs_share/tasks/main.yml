@@ -183,11 +183,48 @@
     - 'HKLM:\SOFTWARE\Policies\Microsoft\Edge'
     - 'HKLM:\SOFTWARE\Policies\Google\Chrome'
 
+# charlie-wiki has no DNS A record (standalone host), so pin the name locally;
+# otherwise the browser cannot resolve wiki.charlie.local and never connects.
+- name: Victim browser -- ensure the wiki hostname resolves
+  when: charlie_enable_victim_browser | bool
+  community.windows.win_hosts:
+    state: present
+    canonical_name: "{{ charlie_wiki_host }}"
+    ip_address: "{{ charlie_wiki_ip }}"
+
+# The script must be readable by the (non-admin) victim token -- see the note in
+# defaults/main.yml. ProgramData grants Users read; the explicit ACL guarantees
+# it regardless of any inheritance hardening.
+- name: Victim browser -- create the browse-script directory
+  when: charlie_enable_victim_browser | bool
+  ansible.windows.win_file:
+    path: "{{ charlie_victim_script_dir }}"
+    state: directory
+
+- name: Victim browser -- let standard users read+execute the browse script
+  when: charlie_enable_victim_browser | bool
+  ansible.windows.win_acl:
+    path: "{{ charlie_victim_script_dir }}"
+    user: BUILTIN\Users
+    rights: ReadAndExecute
+    type: allow
+    state: present
+    inherit: ContainerInherit, ObjectInherit
+    propagation: 'None'
+
 - name: Victim browser -- stage the browse script
   when: charlie_enable_victim_browser | bool
   ansible.windows.win_template:
     src: vpn_runbook_check.cmd.j2
-    dest: 'C:\Windows\Temp\vpn_runbook_check.cmd'
+    dest: "{{ charlie_victim_script_path }}"
+
+# Remove a browse task left by earlier builds under a different name (this only
+# ever deletes -- nothing by this name is created in the guest).
+- name: Victim browser -- remove any stale/duplicate browse task
+  when: charlie_enable_victim_browser | bool
+  community.windows.win_scheduled_task:
+    name: TLO-VictimBrowse
+    state: absent
 
 - name: Victim browser -- scheduled task browses the wiki as the victim (every 3 min)
   when: charlie_enable_victim_browser | bool
@@ -199,7 +236,7 @@
     logon_type: interactive_token
     actions:
       - path: cmd.exe
-        arguments: '/c C:\Windows\Temp\vpn_runbook_check.cmd'
+        arguments: '/c {{ charlie_victim_script_path }}'
     triggers:
       - type: logon
       - type: daily

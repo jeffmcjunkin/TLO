@@ -30,6 +30,15 @@ charlie_bookstack_db_root_password: "Bookstack_DBRoot_2026!"
 # =true is documented as equivalent. We set BOTH for cross-version safety.
 charlie_bookstack_allow_content_scripts: true
 
+# --- public (guest) read access ---------------------------------------------
+# The runbook page must render for an UNAUTHENTICATED viewer: the privileged
+# victim's browser holds no BookStack session, so without this the page 302s to
+# /login and the stored payload never renders. Enabling public access lets the
+# built-in "Public" role (which already carries the content-view permissions)
+# serve pages to anonymous viewers. Stored in BookStack as the `app-public`
+# setting. Also realistic: an internal LAN wiki readable without a login.
+charlie_bookstack_public_access: true
+
 # --- default admin (linuxserver seeds admin@admin.com / "password") ---------
 charlie_bookstack_admin_email: "admin@admin.com"
 charlie_bookstack_admin_password: "BookStackAdmin_2026!"

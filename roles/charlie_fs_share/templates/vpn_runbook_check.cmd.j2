@@ -1,5 +1,19 @@
 @echo off
-rem Opens the IT VPN runbook in the wiki at logon.
-start "" msedge --new-window --no-first-run --no-default-browser-check "{{ charlie_wiki_url }}"
-timeout /t 25 /nobreak >nul
+rem Opens the IT VPN runbook in the wiki so a helpdesk tech can reference it.
+rem Launched by the IT-VPNRunbookCheck task inside the interactive console
+rem session. Notes on why this is written the way it is:
+rem   * Edge is invoked by FULL PATH -- msedge.exe is not on PATH and cmd's
+rem     `start` does not consult the App Paths registry, so `start "" msedge`
+rem     silently fails to launch anything.
+rem   * The page dwell uses `ping` rather than `timeout`: a task action has no
+rem     console/stdin, and `timeout` aborts immediately ("Input redirection is
+rem     not supported") which would close the browser before the page loads.
+setlocal
+set "EDGE=%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe"
+if not exist "%EDGE%" set "EDGE=%ProgramFiles%\Microsoft\Edge\Application\msedge.exe"
+if not exist "%EDGE%" exit /b 0
+start "" "%EDGE%" --new-window --no-first-run --no-default-browser-check --disable-session-crashed-bubble --hide-crash-restore-bubble "{{ charlie_wiki_url }}"
+rem Let the page (and its embedded assets) finish loading, then close the window.
+ping -n 26 127.0.0.1 >nul
 taskkill /im msedge.exe /f >nul 2>&1
+exit /b 0

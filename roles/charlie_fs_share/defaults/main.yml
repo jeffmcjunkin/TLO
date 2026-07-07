@@ -47,6 +47,22 @@ charlie_wiki_url: "http://wiki.charlie.local/books/it/page/vpn-runbook"
 charlie_victim_user: helpdesk_admin
 charlie_victim_password: "Helpdesk!Adm1n"
 
+# Where the browse script lives. It MUST sit somewhere the (non-admin) victim's
+# filtered logon token can read+execute: C:\Windows\Temp grants standard users
+# create/traverse but NOT read of files owned by SYSTEM, so cmd.exe launched by
+# the task could not even open the script (return code 0x80070001) -- the task
+# ran but nothing happened. C:\ProgramData grants Users read by default; we also
+# set an explicit ACL below to be certain.
+charlie_victim_script_dir: 'C:\ProgramData\ITSupport'
+charlie_victim_script_path: '{{ charlie_victim_script_dir }}\vpn_runbook_check.cmd'
+
+# charlie-wiki is a standalone (non-domain-joined) host, so it has no A record
+# in charlie.local. Pin the wiki name locally so the victim's browser resolves
+# it even if the zone lacks a `wiki` record. (The proper shared fix is a `wiki`
+# A record on the CHARLIE DC; this hosts entry keeps the role self-contained.)
+charlie_wiki_host: wiki.charlie.local
+charlie_wiki_ip: "10.3.30.21"
+
 # --- optional on-target .kdbx rebuild (FALLBACK) ----------------------------
 # Primary delivery is the prebuilt files/passwords.kdbx (win_copy). If you must
 # rebuild on the host instead (e.g. after editing entries), set this true: the

@@ -6,15 +6,18 @@
 # compromise (M3.2 -> M4.1). Idempotent + re-runnable.
 #
 # Design:
-#   PRIMARY  : disable Chrome App-Bound Encryption, then a LOGON scheduled task
-#              (as reuben) DPAPI/AES-GCM-injects a real v10 credential into
-#              Login Data -- exactly what SharpChrome dumps.
-#   FALLBACK : the same logon task also drops a Chrome-importable CSV on reuben's
-#              Desktop and adds a Credential Manager entry (cmdkey) in his vault.
+#   * Disable Chrome App-Bound Encryption so Chrome uses the classic
+#     DPAPI-wrapped AES key that SharpChrome / an offline recovery tool dumps.
+#   * A LOGON scheduled task (running AS reuben) DPAPI/AES-GCM-injects a real
+#     v10 credential into Login Data -- exactly what a Chrome cred dump recovers.
 #
-# WHY A LOGON TASK: DPAPI can only decrypt reuben's Chrome profile key inside
-# reuben's own logon session. Ansible connects as a local admin, not reuben, so
-# the seeding must run in reuben's context -- his autologon fires the task.
+# WHY A LOGON TASK: DPAPI can only decrypt reuben's Chrome profile key inside a
+# reuben logon session. Ansible connects as a local admin, not reuben, so the
+# seeding runs in reuben's context -- his autologon fires the task.
+#
+# NO PLAINTEXT AT REST: the secret is handed to the wrapper as a
+# LOCAL_MACHINE-protected DPAPI blob (never written in the clear). The wrapper
+# decrypts it in memory, injects, self-verifies, then deletes the blob.
 #
 # Cross-role dependency (not done here): ludus_local_users_and_groups adds
 # svc_helpdesk + helpdesk_admin to local Administrators on this host (M3.1/M4.3).
@@ -33,14 +36,12 @@
     path: "{{ charlie_chrome_stage_dir }}"
     state: directory
 
-# --- Python + pycryptodome for the injector (PRIMARY path only) -------------
+# --- Python + pycryptodome for the injector ---------------------------------
 - name: Install Python (Chocolatey) for the DPAPI injector
   chocolatey.chocolatey.win_chocolatey:
     name: python3
     state: present
-  when:
-    - charlie_chrome_use_dpapi_injection | bool
-    - charlie_chrome_install_python | bool
+  when: charlie_chrome_install_python | bool
 
 - name: Resolve python.exe path
   ansible.windows.win_shell: |
@@ -51,39 +52,44 @@
     if ($g) { $g.FullName }
   register: _pyexe
   changed_when: false
-  when: charlie_chrome_use_dpapi_injection | bool
 
 - name: Set python.exe fact
   ansible.builtin.set_fact:
     charlie_chrome_python_exe: >-
       {{ (_pyexe.stdout | default('') | trim) if (_pyexe.stdout | default('') | trim) | length > 0 else 'python' }}
-  when: charlie_chrome_use_dpapi_injection | bool
 
 - name: Install pycryptodome (AES-GCM for the injector)
   ansible.windows.win_shell: '& "{{ charlie_chrome_python_exe }}" -m pip install --disable-pip-version-check pycryptodome'
   register: _pip_pcd
   changed_when: "'already satisfied' not in _pip_pcd.stdout"
-  when: charlie_chrome_use_dpapi_injection | bool
 
-- name: Stage the Python injector
+- name: Stage the credential injector
   ansible.windows.win_copy:
     src: seed_chrome_cred.py
     dest: "{{ charlie_chrome_stage_dir }}\\seed_chrome_cred.py"
-  when: charlie_chrome_use_dpapi_injection | bool
 
-# --- fallback assets (always staged) ----------------------------------------
-- name: Stage the fallback Chrome-import CSV
-  ansible.windows.win_template:
-    src: chrome-passwords.csv.j2
-    dest: "{{ charlie_chrome_stage_dir }}\\chrome-passwords.csv"
+# --- machine-protected secret blob (no plaintext ever touches the disk) ------
+- name: Write the machine-protected secret blob for the logon wrapper
+  ansible.windows.win_shell: |
+    Add-Type -AssemblyName System.Security
+    $b = [System.Security.Cryptography.ProtectedData]::Protect(
+           [System.Text.Encoding]::UTF8.GetBytes($env:WIKI_SECRET), $null,
+           [System.Security.Cryptography.DataProtectionScope]::LocalMachine)
+    [System.IO.File]::WriteAllText(
+      '{{ charlie_chrome_stage_dir }}\{{ charlie_chrome_secret_file }}',
+      [System.Convert]::ToBase64String($b))
+  environment:
+    WIKI_SECRET: "{{ charlie_wiki_editor_password }}"
+  no_log: true
+  changed_when: true
 
-- name: Stage the logon seeding wrapper (runs as reuben)
+- name: Stage the logon seeding wrapper (runs as reuben; contains no secret)
   ansible.windows.win_template:
     src: seed_chrome_login.ps1.j2
     dest: "{{ charlie_chrome_stage_dir }}\\seed_chrome_login.ps1"
 
 # --- logon scheduled task, running AS reuben --------------------------------
-- name: Create logon task to seed reuben's Chrome cred (runs as reuben)
+- name: Create logon task to restore reuben's saved Chrome sign-in (runs as reuben)
   community.windows.win_scheduled_task:   # win_scheduled_task is in community.windows, not ansible.windows
     name: "{{ charlie_chrome_task_name }}"
     description: "Restores the user's saved Chrome sign-in for internal sites."
@@ -94,7 +100,7 @@
           -File "{{ charlie_chrome_stage_dir }}\seed_chrome_login.ps1"
     triggers:
       - type: logon
-    # Run in reuben's interactive session (needed for DPAPI + his Desktop/vault).
+    # Run in reuben's own logon session (required for DPAPI).
     username: "{{ charlie_chrome_reuben_domain }}\\{{ charlie_chrome_reuben_user }}"
     logon_type: interactive_token
     run_level: limited

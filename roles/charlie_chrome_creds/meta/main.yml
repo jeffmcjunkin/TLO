@@ -8,8 +8,9 @@ galaxy_info:
   description: >-
     Seeds reuben's saved Chrome login for http://wiki.charlie.local on
     AREUBEN-WS so it is DPAPI-dumpable after compromise (M3.2). Disables Chrome
-    App-Bound Encryption and injects a real v10 credential via a logon
-    scheduled task running as reuben; ships CSV + Credential Manager fallbacks.
+    App-Bound Encryption and injects a real v10 credential into Login Data via a
+    logon scheduled task running as reuben; the secret is delivered as a
+    machine-protected DPAPI blob so no plaintext is written to disk.
   company: TLO
   license: MIT
   min_ansible_version: "2.12"

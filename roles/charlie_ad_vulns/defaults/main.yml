@@ -9,6 +9,7 @@
 # MUST match here (reuben -> AREUBEN-WS, helpdesk_admin -> CHARLIE-FS).
 
 charlie_fqdn: charlie.local          # forest/domain FQDN (DC=charlie,DC=local)
+charlie_wiki_ip: "10.3.30.21"        # BookStack host (non-domain-joined); A record added to the AD zone
 
 # --- OU for computer objects (parity with OSCAR LAPS OU=Workstations) ---
 charlie_workstations_ou: Workstations
