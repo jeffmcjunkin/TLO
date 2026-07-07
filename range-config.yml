@@ -107,7 +107,7 @@ ludus:
     ram_gb: 4
     cpus: 2
     windows:
-      sysprep: false
+      sysprep: true          # win2022 template not SID-generalized; sysprep for a unique machine SID (domain join)
       autologon_user: "charlie\\helpdesk_admin"     # privileged victim who auto-browses the wiki (M4.2)
       autologon_password: "Helpdesk!Adm1n"
     domain:
@@ -183,7 +183,7 @@ ludus:
     ram_gb: 4
     cpus: 2
     windows:
-      sysprep: false
+      sysprep: true          # unique machine SID for domain join
     domain:
       fqdn: oscar.local
       role: member
@@ -200,7 +200,7 @@ ludus:
     ram_gb: 6
     cpus: 4
     windows:
-      sysprep: false
+      sysprep: true          # unique machine SID for domain join
     domain:
       fqdn: oscar.local
       role: member
@@ -314,7 +314,7 @@ ludus:
     ram_gb: 8
     cpus: 4
     windows:
-      sysprep: false
+      sysprep: true          # unique machine SID for domain join
       visual_studio_version: 2022   # .NET / MSBuild for the C# supply-chain build
     domain:
       fqdn: alpha.local
@@ -334,7 +334,7 @@ ludus:
     ram_gb: 6
     cpus: 4
     windows:
-      sysprep: false
+      sysprep: true          # unique machine SID for domain join
     domain:
       fqdn: alpha.local
       role: member
