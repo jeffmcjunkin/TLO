@@ -143,6 +143,7 @@ ludus:
       sysprep: false
       chocolatey_packages:
         - googlechrome
+      chocolatey_ignore_checksums: true   # googlechrome MSI checksum rotates upstream; ignore to avoid deploy break
       autologon_user: "charlie\\reuben"
       autologon_password: "Reuben.Ashford.2025"
     domain:
