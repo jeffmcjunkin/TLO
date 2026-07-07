@@ -81,7 +81,7 @@
 
     - name: Look up project "{{ alpha_gitlab_group }}/{{ alpha_gitlab_project }}"
       ansible.builtin.uri:
-        url: "{{ alpha_gitlab_local_url }}/api/v4/projects/{{ (alpha_gitlab_group ~ '/' ~ alpha_gitlab_project) | urlencode }}"
+        url: "{{ alpha_gitlab_local_url }}/api/v4/projects/{{ alpha_gitlab_group | urlencode }}%2F{{ alpha_gitlab_project | urlencode }}"
         headers:
           PRIVATE-TOKEN: "{{ alpha_gitlab_pat }}"
         status_code: [200, 404]
@@ -122,7 +122,7 @@
     # ---- masked CI/CD variables (M7.5) ----
     - name: Resolve project id
       ansible.builtin.uri:
-        url: "{{ alpha_gitlab_local_url }}/api/v4/projects/{{ (alpha_gitlab_group ~ '/' ~ alpha_gitlab_project) | urlencode }}"
+        url: "{{ alpha_gitlab_local_url }}/api/v4/projects/{{ alpha_gitlab_group | urlencode }}%2F{{ alpha_gitlab_project | urlencode }}"
         headers:
           PRIVATE-TOKEN: "{{ alpha_gitlab_pat }}"
       register: gl_project
