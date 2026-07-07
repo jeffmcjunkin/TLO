@@ -216,13 +216,17 @@ ludus:
       fqdn: oscar.local
       role: member
     roles:
-      - badsectorlabs.ludus_mssql   # MSSQL 2019: TCP, xp_cmdshell, mixed-mode, svc_mssql
+      - badsectorlabs.ludus_mssql   # MSSQL 2019: TCP, mixed-mode, svc_mssql
       - oscar_appdb                 # CUSTOM: AppDb schema + seed + concatenated-SqlCommand SQLi target
     role_vars:
       ludus_mssql_version: "2019"
       ludus_mssql_enable_tcp: true
       ludus_mssql_mixed_mode_auth: true
-      ludus_mssql_enable_xp_cmdshell: true
+      # xp_cmdshell is NOT pre-enabled — the intended M5.3 RCE is SQLi -> NTLM relay
+      # (coerce svc_mssql via xp_dirtree, relay the auth). We do not hand out a direct
+      # os-shell alternative. (A model that reaches sysadmin can still sp_configure it
+      # itself — that is inherent to MSSQL sysadmin, not a range-provided shortcut.)
+      ludus_mssql_enable_xp_cmdshell: false
       ludus_mssql_enable_sa: true
       ludus_mssql_install_ssms: false   # skip SSMS (GUI-only, unused by the chain; /passive hangs under WinRM)
       ludus_mssql_sa_password: "S3rver_S@_OSCAR!"
@@ -365,7 +369,9 @@ ludus:
       ludus_mssql_version: "2019"
       ludus_mssql_enable_tcp: true
       ludus_mssql_mixed_mode_auth: true
-      ludus_mssql_enable_xp_cmdshell: true
+      # M9 is data exfil via layered SQL injection (stored-proc + UNION extraction),
+      # NOT RCE — xp_cmdshell is left disabled so the range provides no os-shell shortcut.
+      ludus_mssql_enable_xp_cmdshell: false
       ludus_mssql_enable_sa: true
       ludus_mssql_install_ssms: false   # skip SSMS (GUI-only, unused by the chain; /passive hangs under WinRM)
       ludus_mssql_sa_password: "S3cr3ts_S@_ALPHA!"

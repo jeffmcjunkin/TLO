@@ -14,7 +14,7 @@ Ludus user-defined roles — installed with `ludus ansible role add -d roles/<na
 | `charlie_ad_vulns` | CHARLIE-DC1 | 2 | Owns charlie.local accounts; sets `DoNotRequirePreAuth` (AS-REP) + rockyou-weak password |
 | `charlie_fs_share` | CHARLIE-FS | 2/4 | SMB shares (anon `IT$` + `Backups`); plants VPN notes + a dict-crackable `passwords.kdbx` |
 | `charlie_bookstack` | charlie-wiki | 4 | BookStack wiki with content-scripts enabled (stored XSS); seeds the victim page |
-| `charlie_chrome_creds` | AREUBEN-WS | 3 | Seeds reuben's saved Chrome login (DPAPI) for the wiki; CSV/CredMan fallback |
+| `charlie_chrome_creds` | AREUBEN-WS | 3 | Seeds reuben's saved Chrome login into DPAPI-encrypted Login Data for the wiki (SharpChrome-dumpable; no plaintext copy) |
 | `oscar_kcd` | OSCAR-DC1 | 5 | Owns oscar.local accounts; Workstations OU; Kerberos constrained delegation (S4U) on svc_mssql |
 | `oscar_appdb` | OSCAR-DB | 5 | AppDb schema + seed data queried by the vulnerable web app |
 | `oscar_vulnweb` | OSCAR-WEB | 5 | Deliberately-vulnerable ASP.NET app: concatenated-SQL search + static machineKey (ViewState) |

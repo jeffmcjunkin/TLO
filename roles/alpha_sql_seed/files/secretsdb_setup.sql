@@ -142,15 +142,8 @@ BEGIN
 END
 GO
 
-/* ---- ensure xp_cmdshell is available ---- */
-BEGIN TRY
-    EXEC sp_configure 'show advanced options', 1; RECONFIGURE;
-    EXEC sp_configure 'xp_cmdshell', 1;            RECONFIGURE;
-END TRY
-BEGIN CATCH
-    PRINT 'xp_cmdshell not (re)configured: ' + ERROR_MESSAGE();
-END CATCH
-GO
+/* M9 is UNION/stored-proc data exfiltration, not RCE — xp_cmdshell is intentionally
+   left disabled here so the range provides no direct os-shell path around the SQLi. */
 
 PRINT 'SecretsDb setup complete.';
 GO

@@ -40,7 +40,7 @@ charlie_helpdesk_admin_password: "Helpdesk!Adm1n"
 #     Created for completeness. The account whose Chrome cred is actually seeded
 #     is reuben (see charlie_chrome_creds / charlie_bookstack). Set
 #     charlie_create_webed: false to skip.
-charlie_create_webed: true
+charlie_create_webed: false   # reuben is the M4.1 wiki editor (his Chrome cred is the M3.2 loot); no extra editor account
 charlie_webed_username: webed
 charlie_webed_firstname: Wanda
 charlie_webed_lastname: Edwards

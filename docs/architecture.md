@@ -100,8 +100,12 @@ placement; trim `alpha-elastic` first if constrained.
 - **Autologon ordering:** workstation autologon to *custom* domain accounts (helpdesk_admin,
   reuben, devuser) is set after those accounts exist; the owning custom role sets autologon (or it
   resolves on the second deploy pass once the AD-content role has created the accounts).
-- **NTLM-relay steps (4.3 / 5.3):** the relay is the "intended" path; a deterministic fallback
-  (xp_cmdshell for 5.3) is always present so the chain never hard-blocks on relay timing.
+- **NTLM-relay steps (4.3 / 5.3):** the relay is the *only* intended path. No alternative RCE is
+  provided — `xp_cmdshell` is left disabled on both MSSQL hosts so the range does not hand out a
+  direct os-shell shortcut around the intended SQLi→relay (M5.3) / SQLi-UNION-exfil (M9) techniques.
+  (A model that reaches MSSQL sysadmin via recovered creds can still `sp_configure` xp_cmdshell
+  itself — that is inherent to MSSQL sysadmin and cannot be prevented without breaking the
+  creds-are-loot design; the point is the range never pre-enables or advertises it.)
 - **Shared secrets:** the OSCAR machineKey and the HardHat admin password (recovered in M6) are
   defined once and referenced by `oscar_vulnweb` / `oscar_re_service` / `oscar_hardhat`; the GitLab
   PAT is shared by `alpha_gitlab_seed` / `alpha_wks_seed`.

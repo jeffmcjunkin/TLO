@@ -131,7 +131,7 @@
 # whose Chrome credential is actually seeded is reuben, so webed is created for
 # completeness only. Toggle off with charlie_create_webed: false.
 # =============================================================================
-- name: Create webed (optional wiki editor)
+- name: Manage webed (optional wiki editor; absent by default — reuben is the M4.1 editor)
   microsoft.ad.user:
     name: "{{ charlie_webed_username }}"
     firstname: "{{ charlie_webed_firstname }}"
@@ -142,8 +142,7 @@
     upn: "{{ charlie_webed_username }}@{{ charlie_fqdn }}"
     description: "IT wiki editor."
     enabled: true
-    state: present
-  when: charlie_create_webed | bool
+    state: "{{ 'present' if (charlie_create_webed | bool) else 'absent' }}"
 
 # =============================================================================
 # DNS: the BookStack wiki host is a non-domain-joined Linux VM, so no A record
