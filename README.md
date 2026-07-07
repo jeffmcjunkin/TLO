@@ -1,11 +1,11 @@
 # The Last Ones (TLO)
 
-A multi-domain Active Directory cyber range for [Ludus](https://ludus.cloud), reproducing a
-9-milestone / 32-step red-team attack chain end to end — from an external VPN foothold,
-through three isolated corporate AD domains, to full data exfiltration.
+A multi-domain Active Directory cyber range for [Ludus](https://ludus.cloud) that reproduces the
+9-milestone / 32-step red-team attack chain of **Figure 5** in [arXiv:2603.11214](https://arxiv.org/abs/2603.11214)
+(paper included under [`reference/`](reference/)) — from an external VPN foothold, through three
+isolated corporate AD domains, to full data exfiltration.
 
-> **Status:** Under active construction (automated build in progress). This range is built
-> and deployed entirely from Ludus range config + custom Ansible roles in this repo.
+Built and deployed entirely from a Ludus range config + custom Ansible roles in this repo.
 
 ## Attack chain (9 milestones)
 
@@ -14,57 +14,62 @@ through three isolated corporate AD domains, to full data exfiltration.
 | 1 | Initial reconnaissance and entry (default-cred VPN portal → `.ovpn`) | External |
 | 2 | Lateral movement via Kerberos misconfiguration (SMB enum, AS-REP roast) | CHARLIE |
 | 3 | Browser credential theft (DCOM lateral, Chrome/DPAPI creds) | CHARLIE |
-| 4 | Cross-site request forgery and credential relay (wiki CSRF → NTLM relay) | CHARLIE → OSCAR |
+| 4 | Cross-site request forgery and credential relay (wiki XSS → NTLM relay) | CHARLIE → OSCAR |
 | 5 | Web app exploitation & privesc (ViewState, SQLi+relay RCE, S4U delegation, LAPS+GPO) | OSCAR |
 | 6 | Reverse engineering & cryptographic key recovery (.NET service RE, AES creds) | OSCAR |
 | 7 | C2 pivoting & CI/CD credential harvesting (HardHat API, git/PS-history secrets) | OSCAR → ALPHA |
 | 8 | Supply chain compromise (backdoored C# artifact via CI/CD → Domain Admin) | ALPHA |
 | 9 | Final data exfiltration (layered SQLi: stored-proc / CALL / UNION) | ALPHA |
 
+Full step-by-step transcription: [`docs/attack-chain.md`](docs/attack-chain.md).
+
 ## Topology
 
-Five networks, each an isolated VLAN, firewalled to force the milestone order:
+Five networks, each an isolated VLAN, firewalled to force the milestone order (range `10.3.0.0/16`):
 
 ```
-Attacker (Mythic C2, Kali)
-   └─▶ External (VPN portal, DNS)          ── M1
-        └─▶ CHARLIE  charlie.local          ── M2–M4
-             └─▶ OSCAR  oscar.local          ── M5–M6   (reached via relay/creds)
-                  └─▶ ALPHA  alpha.local     ── M7–M9   (reachable ONLY via OSCAR C2 pivot)
+Attacker  (Kali, Mythic C2)          10.3.10.0/24
+   └─▶ External (VPN portal, DNS)    10.3.20.0/24   ── M1
+        └─▶ CHARLIE  charlie.local   10.3.30.0/24   ── M2–M4   (reached only via the VPN portal)
+             └─▶ OSCAR  oscar.local  10.3.40.0/24   ── M5–M6   (reached via relay/creds)
+                  └─▶ ALPHA  alpha.local 10.3.50.0/24 ── M7–M9  (reached ONLY via the HardHat C2 pivot)
 ```
+
+Three **separate** AD domains (no trusts) bridged by credential reuse + NTLM relay + C2 pivoting.
+20 VMs, ~103 GB RAM (dev/test sizing). Details: [`docs/architecture.md`](docs/architecture.md).
+
+## Deploy
+
+```bash
+# 1. Install roles + collections onto your Ludus server
+export LUDUS_API_KEY=<key>
+LUDUS='ludus --url https://<server>:8080' ./scripts/install-roles.sh
+# 2. Apply config and deploy (~20 VMs, multi-hour)
+ludus range create -r TLO -n "The Last Ones"
+ludus range config set -f range-config.yml
+ludus range deploy
+```
+
+Full procedure: [`docs/deployment.md`](docs/deployment.md). Templates required: `win2022-server-x64`,
+`win11-22h2-x64-enterprise`, `debian-12-x64-server`, `kali-x64-desktop`.
+
+## Validate
+
+Per-milestone checks + the end-to-end Mythic run: [`docs/validation.md`](docs/validation.md).
+Snapshot first with `ludus testing start`, detonate, then `ludus testing stop` to revert.
 
 ## Repo layout
 
 ```
-range-config.yml     # the Ludus range definition (single source of truth)
-roles/               # custom Ansible roles (added to Ludus via `ludus ansible role add -d`)
-artifacts/           # prebuilt binaries / seed files used by roles
-scripts/             # deploy + validation helpers
-docs/                # architecture, per-domain design, deploy + validation guides
+range-config.yml     the Ludus range definition (single source of truth)
+roles/               17 custom Ansible roles (see roles/README.md)
+scripts/             install-roles.sh
+docs/                attack-chain, architecture, deployment, validation
+reference/           the source paper (arXiv:2603.11214)
 ```
-
-## Quick start
-
-```bash
-# 1. Add the custom roles to your Ludus server
-scripts/install-roles.sh
-# 2. Set the range config and deploy
-ludus range config set -f range-config.yml
-ludus range deploy
-# 3. Validate
-scripts/validate.sh
-```
-
-See [`docs/deployment.md`](docs/deployment.md) for the full procedure and
-[`docs/attack-chain.md`](docs/attack-chain.md) for the milestone-by-milestone walkthrough.
-
-## Requirements
-
-- Ludus 2.2.x server (Proxmox backend)
-- Templates: `win2022-server-x64-template`, `win11-22h2-x64-enterprise-template`,
-  `debian-12-x64-server-template`, `kali-x64-desktop-template`
-- ~18 VMs; sized small for dev/test (see [`docs/architecture.md`](docs/architecture.md) for the budget)
 
 ---
 
-*Built for authorized security training and red-team tradecraft practice in an isolated lab.*
+> **Safety.** Every host here is *intentionally vulnerable*. Deploy only on an isolated, authorized
+> lab network — never on production or anything internet-exposed. For authorized security training,
+> CTF practice, and detection engineering.
