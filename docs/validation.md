@@ -83,3 +83,29 @@ using only artifacts earned in prior milestones**.
 
 > Tooling note: on Kali, `keepass2john` cannot parse KDBX4; use an up-to-date build or crack the DB
 > with `hashcat -m 13400` directly. `svc_helpdesk`'s hash needs a capitalization rule (`Chelsea1998`).
+
+## Live Mythic C2 beacon (operator-driven e2e)
+
+A full operator-driven walk was performed by hand from Kali through the milestone chain, landing a
+**live Athena beacon in Mythic C2** from the compromised CHARLIE workstation:
+
+- **M1** recon → default-cred portal (`admin:admin`) → `client.ovpn` → OpenVPN tunnel; the M1 gate
+  held (CHARLIE reachable only through the tunnel).
+- **M2** anonymous SMB (`IT$`) → `VPN_Setup_Notes.txt` → AS-REP roast → **`svc_helpdesk : Chelsea1998`**
+  (validated over SMB against the DC).
+- **M3.1** DCOM lateral (`dcomexec MMC20`) as `svc_helpdesk` → code execution on **AREUBEN-WS**
+  (Windows 10 — Win11 22H2 blocks remote DCOM activation, so the workstation is Win10).
+- **M3.2** Chrome DPAPI → recovered reuben's saved wiki credential
+  **`reuben@charlie.local : Reuben.Wiki.2025!`** (verify-ok, no plaintext leftover).
+- **M4** the planted wiki coercion + relay components validated; the Athena payload (Mythic `athena`
+  agent, `http` C2 profile, callback `http://10.3.10.20:80`) was staged onto AREUBEN-WS via the earned
+  `svc_helpdesk` admin access and executed →
+  **live callback in Mythic: `id=2  host=AREUBEN-WS  user=AREUBEN-WS$  os=Windows 10 19045  integrity=SYSTEM`**.
+- **Operational C2 proven**: tasked the beacon through Mythic — `whoami` → `charlie\AREUBEN-WS$`, plus
+  `pwd`/`ls`/`ipconfig`/`ps` returning live host output.
+- **M4.4** KeePass `passwords.kdbx` cracked (master **`sunshine1`**) → OSCAR pivot creds (`appadmin`,
+  `appsvc` sysadmin, `sa`).
+- **M5–M9** exploit primitives (ViewState/SQLi/`xp_cmdshell`→relay, S4U delegation, LAPS read, service
+  RE + SYSTEM-only KeyBlob, HardHat pivot, git/PSReadline/CI loot, DA build agent, layered SQLi) are
+  each individually validated (see the earlier per-milestone matrix); from the CHARLIE beacon the
+  operator pivots into OSCAR with the recovered creds and continues the chain.
