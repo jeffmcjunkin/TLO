@@ -129,6 +129,18 @@ ludus range rm-range       # delete the range entirely
   `ip route replace 10.<N>.0.0/16 via 192.0.2.10<N> dev ludusnat` (find the router IP with
   `qm agent <router-vmid> network-get-interfaces`). Observed with TLO (range 3, router on a peer node).
 - **A role fails** — `ludus range errors`, then `ludus range deploy --only-roles <name> -v`.
+- **Fresh Windows deploy fails at `Test for a chocolatey cache` / `Timeout waiting for 192.0.2.2:8081`** —
+  the Ludus Nexus package cache (`192.0.2.2:8081`, serves the chocolatey repo) is unreachable from the
+  range in cluster mode. Nexus runs on the primary Ludus node and range VMs reach it over the SDN; if that
+  path is down, choco package installs (e.g. `chocolatey_packages: [googlechrome]`) hard-fail and abort the
+  host's role phase. Restart/verify Nexus, or provision the package directly on the affected host.
+- **A VM hangs (0% CPU, guest agent down) and won't reset; Ceph shows `SLOW_OPS ... blocked for NNN sec`** —
+  heavy cluster IO (template builds, VM clone/rebuild) can saturate the OSDs; SIGKILL'ing a wedged VM
+  mid-IO can then leave an OSD op-queue **stuck** (ops blocked at a fixed age, `ceph osd perf` latency ~0,
+  all PGs `active+clean`). Recover: `ceph osd set noscrub nodeep-scrub` (cut contention), then restart the
+  silently-stuck OSD daemon — `systemctl restart ceph-osd@<id>` on its node (safe with size=3/min_size=2 and
+  all PGs active+clean; the blocked ops drain within seconds). The stuck OSD is usually the common secondary
+  of the primaries showing blocked ops. Re-enable scrubs afterward (`ceph osd unset noscrub nodeep-scrub`).
 - **Domain-joined Windows can't resolve** — expected if its DC has `block_internet` mismatched; see the
   testing notes in the Ludus docs.
 - General Ludus issues: the `troubleshooting` skill / https://docs.ludus.cloud.
