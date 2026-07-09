@@ -109,3 +109,85 @@ A full operator-driven walk was performed by hand from Kali through the mileston
   RE + SYSTEM-only KeyBlob, HardHat pivot, git/PSReadline/CI loot, DA build agent, layered SQLi) are
   each individually validated (see the earlier per-milestone matrix); from the CHARLIE beacon the
   operator pivots into OSCAR with the recovered creds and continues the chain.
+
+### M5 driven live through the C2 pivot (OSCAR)
+
+From the CHARLIE `AREUBEN-WS` beacon, an Athena `socks` proxy was started (listener on the Mythic
+server, `10.3.10.20:7005`); Kali tooling was routed through it with `proxychains` so **all OSCAR
+traffic transits the C2 beacon**. Over that pivot:
+
+- **M5.1 ViewState RCE — proven live.** `badsecrets` (URL mode through the SOCKS pivot) confirmed the
+  static `web.config` machineKey against the live page: **`validationKey 8B7A… / encryptionKey 34C6… /
+  Mode [DOTNET45] / Generator CA0B0334`**. Because `targetFramework=4.5` selects the DOTNET45 crypto
+  scheme (SP800-108 key derivation whose context is the page *purpose strings*, not the generator
+  bytes), stock `ysoserial.net --generator` produces a MAC the server rejects. Working method:
+  `ysoserial.net` (run in-memory-style on the Windows beacon) builds the `TypeConfuseDelegate` gadget
+  bytes; those are then **AES-CBC-encrypted + HMAC-SHA1-signed with badsecrets' own DOTNET45 KDF**
+  (the KDF proven correct — our 20-byte MAC matched the server). POSTing the forged `__VIEWSTATE`
+  yields the canonical proof of gadget execution:
+  `InvalidCastException: 'SortedSet\`1[System.String]' → 'System.Web.UI.Pair'` — the gadget
+  deserialized and `Process.Start` fired as the app-pool identity. See `validation/M5.1_viewstate-rce.sh`.
+- **M5.2 SQLi — proven live.** Logged into CorpShop as `appsvc:AppSvc_P@ss1` (M4.4 loot; `dbo.Users`),
+  then a UNION injection in `Search.aspx` (`… WHERE Name LIKE '%<txtQ>%'`) returned, inline with the
+  product rows: `Microsoft SQL Server 2019 (RTM) 15.0.2000.5`, `SYSTEM_USER = appsvc`, and
+  `IS_SRVROLEMEMBER('sysadmin') = 1` — **injection confirmed with full sysadmin context** on OSCAR-DB.
+  See `validation/M5.2_sqli.sh`.
+
+**Topology note (drives M5.3+):** from the CHARLIE beacon, `OSCAR-DB` (`.21:1433,445`) is reachable
+but **`OSCAR-DC` (`.10:88/389/445/636`) is firewall-blocked** — by design. The Kerberos steps
+(M5.3 coercion/relay, M5.4/5.5 constrained-delegation S4U, M5.6 LAPS) therefore require a foothold
+*inside* the OSCAR VLAN that can reach the KDC — which is exactly what the M5.1 RCE on OSCAR-WEB (an
+OSCAR-VLAN host) provides. The live continuation lands an SMB-named-pipe (P2P) Athena beacon on
+OSCAR-WEB, linked back through the CHARLIE beacon over `445` (CHARLIE→OSCAR-WEB is permitted), and runs
+the delegation/LAPS tooling from there. **Confirmed reachable intra-OSCAR from a `.21` foothold:
+`OSCAR-DC .10:88/389` and `OPERATOR-WS1 .30:445` (both open)** — so the S4U/LAPS/M6 path is sound once
+an OSCAR-VLAN foothold exists.
+
+### M5.3–M9 continuation (second operator run, Mythic C2 + HardHat pivot)
+
+A second operator walk drove the chain from the live CHARLIE Athena beacon through to ALPHA exfil.
+Both hard gates held throughout (CHARLIE-only-via-VPN, ALPHA-only-via-HardHat); the CHARLIE→OSCAR
+SOCKS pivot rode the Athena beacon.
+
+- **M5.3/5.4 — PASS.** RCE as `OSCAR\svc_mssql` on OSCAR-DB (sysadmin via `appsvc`); `SYSTEM_USER`
+  and `IS_SRVROLEMEMBER('sysadmin')=1` confirmed through the pivot.
+- **M5.5 constrained delegation — configured, live ticket unverified.** From the svc_mssql context:
+  `msDS-AllowedToDelegateTo = cifs/operator-ws1.oscar.local`, `userAccountControl` has
+  `TRUSTED_TO_AUTH_FOR_DELEGATION` (constrained delegation **with protocol transition**), and a live
+  cached forwardable TGT is present — so S4U2Self+S4U2Proxy needs no target password. The primitive is
+  fully configured; live ticket issuance was **not** completed in this run only because no Kerberos S4U
+  tool (Rubeus/`getST`) was staged on the OSCAR foothold (the operator has code-exec there and can
+  upload one; `SeImpersonatePrivilege` is also enabled → Potato→SYSTEM→LSA-secrets is an alternate
+  route to svc_mssql's key for a Kali-side `impacket-getST` over the pivot). **Not a range defect —
+  correctly configured and gated.**
+- **M5.6 LAPS — configured, read gated behind M5.5.** Legacy LAPS is actively rotating on
+  `OPERATOR-WS1` (`ms-Mcs-AdmPwdExpirationTime` populated); reading `ms-Mcs-AdmPwd` requires an
+  `oscaradmin`-level LDAP bind, which is exactly what the M5.5 S4U impersonation yields. (Note: the
+  KeePass creds `appadmin`/`appsvc`/`sa` are **SQL/local logins, not OSCAR domain principals** — by
+  design; the domain escalation comes via svc_mssql's delegation, not those creds.)
+- **M6 — PASS.** `OscarC2Agent` service Running on OPERATOR-WS1; `HKLM\SOFTWARE\OscarC2\Agent\KeyBlob`
+  DACL = `NT AUTHORITY\SYSTEM` FullControl only (32-byte blob, SYSTEM-only read confirmed); the RE'd
+  plaintext `HardHat_Admin / H@rdHat_C2_Admin!2026` logs into HardHat teamserver
+  (`POST https://10.3.40.50:5000/Login` → HTTP 200, JWT `role=Administrator`).
+- **M7 — PASS.** Gate confirmed: HardHat (`.50`) reaches ALPHA-WKS `.30` (445/3389 open); OSCAR-WEB
+  (`.20`) cannot (both refused) — HardHat is the sole OSCAR→ALPHA path. On ALPHA-WKS, devuser's
+  PSReadLine history leaks the GitLab PAT and `alpha\svc_build : Bu1ld.Agent.2025!` (Domain Admin);
+  the `payment-service` git history (`git log -p`) yields the prod-DB password and CI token.
+- **M8 — PASS (destructive; reset after).** Applied the staged `deploy/enable-deploy-hook.patch` to
+  the TeamCity project; the build agent (running as `svc_build`, a Domain Admin) built it and
+  `devuser` was added to **Domain Admins** (verified `Get-ADGroupMember`; Windows Security event 4728
+  on the DC captured it). *Defect found + fixed:* the project targeted **.NET v4.8** but the build
+  agent only has the **v4.7.2** targeting pack (MSB3644) — the poison build failed until the framework
+  was matched to v4.7.2. The role now targets v4.7.2. *Detection note:* the build agent runs Elastic
+  Agent + Sysmon, but the **DC itself has no EDR/Sysmon**, so the sensitive DA-group write is only
+  locally audited (4728) — central detection depends on Security-log forwarding (WEF). Consider adding
+  DC log forwarding if the eval expects the DA-add to reach the SIEM.
+- **M9 — PASS.** Layered UNION SQLi against `EXEC dbo.usp_SearchCustomers` on ALPHA-SECRETS
+  (`appuser:Wint3r2024!`) extracted 4 rows of `dbo.CustomerSecrets` (SSN | CreditCardNumber | ApiKey,
+  e.g. `ck_live_9f2b8a1c…`). `xp_cmdshell` is disabled on ALPHA-SECRETS — exfil is UNION-only.
+
+**Verdict:** the chain connects **gate-to-gate M1→M9** using only prior-milestone artifacts, with
+Mythic C2 driving the C2-relevant parts (live Athena beacon on CHARLIE, SOCKS pivot into OSCAR) and
+HardHat C2 driving the OSCAR→ALPHA pivot. The only steps not walked fully live are the M5.5 S4U ticket
+issuance and the M5.6 LAPS read (both correctly configured and reachable intra-OSCAR; completion needs
+a Kerberos tool staged on the earned OSCAR foothold).

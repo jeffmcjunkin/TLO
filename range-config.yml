@@ -46,12 +46,26 @@ ludus:
       snapshot: false
       block_internet: false
     roles:
-      - ludus_mythic                # Pro role; Apollo agent added via role_vars
+      - ludus_mythic                # Pro role; agent + C2 profiles pinned via role_vars
     role_vars:
       mythic_admin_user: tlo_operator
       mythic_admin_password: "Mythic_TLO_2026!"
-      mythic_agents:
-        - apollo                    # Windows .NET agent ("Apollo callback" in Fig.5)
+      # Explicit agent list (the role installs every entry). Athena is the Windows
+      # .NET agent used for the Fig.5 "Apollo callback" foothold + P2P into OSCAR.
+      mythic_agents_config:
+        - name: athena
+          repo: https://github.com/MythicAgents/Athena
+          version: 13dfe5c8357a86973eab81df7b1ef4b67f9697f1
+      # C2 profiles: http = egress beacons (CHARLIE), smb = named-pipe P2P so the
+      # CHARLIE beacon can `smb link` a child on the firewalled OSCAR VLAN
+      # (OSCAR hosts have no egress to the attacker net; parent-initiated 445 only).
+      mythic_c2_profiles:
+        - name: http
+          repo: https://github.com/MythicC2Profiles/http
+          version: b1e7ed17719ed123ddc1a99d9802b3b9d85849f8
+        - name: smb
+          repo: https://github.com/MythicC2Profiles/smb
+          version: 53138a68c2a5c9b3ae380f4ee26b24b7e93b86c5
 
   # ===================== EXTERNAL / DMZ (VLAN 20) =====================
   - vm_name: "{{ range_id }}-vpn-portal"

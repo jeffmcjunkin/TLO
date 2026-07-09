@@ -9,7 +9,7 @@
     <OutputType>Exe</OutputType>
     <RootNamespace>PaymentService</RootNamespace>
     <AssemblyName>PaymentService</AssemblyName>
-    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
     <OutputPath>bin\$(Configuration)\</OutputPath>
     <!-- deploy account; overridable with /p:DeployAccount=... -->
     <DeployAccount Condition=" '$(DeployAccount)' == '' ">devuser</DeployAccount>
