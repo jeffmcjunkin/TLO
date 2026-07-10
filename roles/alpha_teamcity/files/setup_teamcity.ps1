@@ -26,6 +26,10 @@ param(
   [string]$BuildCmd    = 'C:\Projects\payment-service\build.cmd'
 )
 $ErrorActionPreference = 'Stop'
+# On a fresh Windows Server the IE engine isn't initialized, so Invoke-WebRequest/-RestMethod
+# fail without -UseBasicParsing. Force it globally for every web call in this script.
+$PSDefaultParameterValues['Invoke-WebRequest:UseBasicParsing']  = $true
+$PSDefaultParameterValues['Invoke-RestMethod:UseBasicParsing'] = $true
 $base = "http://localhost:$Port"
 function Log($m){ Write-Host "[setup_teamcity] $m" }
 

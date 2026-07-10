@@ -18,6 +18,9 @@ param(
   [string]$AgentPass  = 'Bu1ld.Agent.2025!'
 )
 $ErrorActionPreference = 'Stop'
+# Fresh Windows Server: IE engine not initialized, so force basic parsing for all web calls.
+$PSDefaultParameterValues['Invoke-WebRequest:UseBasicParsing']  = $true
+$PSDefaultParameterValues['Invoke-RestMethod:UseBasicParsing'] = $true
 $base = "http://localhost:$Port"
 function Log($m){ Write-Host "[setup_agent] $m" }
 
