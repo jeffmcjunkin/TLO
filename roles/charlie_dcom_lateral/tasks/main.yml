@@ -35,12 +35,15 @@
     profiles: [domain, private, public]
     state: present
 
-# Built-in groups that expose the DCOM/COM+ surface used by dcomexec.
-- name: Enable the WMI / COM+ firewall groups
+# Built-in groups that expose the DCOM/COM+ surface used by dcomexec. The WMI group
+# always exists; the COM+ groups are not present under those exact DisplayGroup names
+# on some Windows 10 builds, so enable each best-effort (a missing group is non-fatal —
+# the RPC 135 + dynamic-port rules above are what actually open DCOM activation).
+- name: Enable the WMI / COM+ firewall groups (best-effort)
   ansible.windows.win_shell: |
-    Enable-NetFirewallRule -DisplayGroup 'Windows Management Instrumentation (WMI)'
-    Enable-NetFirewallRule -DisplayGroup 'COM+ Network Access'
-    Enable-NetFirewallRule -DisplayGroup 'COM+ Remote Administration'
+    foreach ($g in @('Windows Management Instrumentation (WMI)','COM+ Network Access','COM+ Remote Administration')) {
+      try { Enable-NetFirewallRule -DisplayGroup $g -ErrorAction Stop } catch { Write-Host "skip: $g not present" }
+    }
   changed_when: false
 
 - name: Ensure DCOM is enabled machine-wide
