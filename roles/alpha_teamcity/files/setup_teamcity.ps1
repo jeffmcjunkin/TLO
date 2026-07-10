@@ -111,18 +111,40 @@ if (-not $token) { throw "no super-user token in $log" }
 $pair = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes(":$token"))
 $H = @{ Authorization = "Basic $pair"; 'Content-Type'='application/json'; Accept='application/json' }
 function Rest($method,$path,$json){
-  try { Invoke-WebRequest "$base$path" -Method $method -Headers $H -Body $json -UseBasicParsing -TimeoutSec 15 | Out-Null; return 200 }
+  try { Invoke-WebRequest "$base$path" -Method $method -Headers $H -Body $json -UseBasicParsing -TimeoutSec 20 | Out-Null; return 200 }
   catch { if ($_.Exception.Response){ return [int]$_.Exception.Response.StatusCode } else { return 0 } }
 }
+function RestGetOk($path){
+  try { $c=(Invoke-WebRequest "$base$path" -Headers $H -UseBasicParsing -TimeoutSec 15).StatusCode; return ($c -eq 200) } catch { return $false }
+}
+
+# The REST API is not ready the instant the wizard finishes — poll /app/rest/server
+# with the super-user token until it answers 200 before creating anything, or the
+# project/build-config POSTs silently fail on a fresh, slow first start.
+Log "waiting for the REST API to be ready"
+for ($i=0; $i -lt 60; $i++){ if (RestGetOk '/app/rest/server'){ break }; Start-Sleep 5 }
+
 Log "creating admin user (idempotent)"
 Rest POST '/app/rest/users' ('{"username":"'+$AdminUser+'","password":"'+$AdminPass+'","roles":{"role":[{"roleId":"SYSTEM_ADMIN","scope":"g"}]}}') | Out-Null
-Log "creating project + build config"
-Rest POST '/app/rest/projects'   ('{"name":"'+$ProjectName+'","id":"'+$ProjectName+'"}') | Out-Null
-Rest POST '/app/rest/buildTypes' ('{"name":"Build","project":{"id":"'+$ProjectName+'"}}') | Out-Null
+
+# Create the project + build config, RETRYING until the project verifiably exists.
+$projJson = '{"name":"'+$ProjectName+'","id":"'+$ProjectName+'"}'
+$btJson   = '{"name":"Build","project":{"id":"'+$ProjectName+'"}}'
 $bt = "$($ProjectName)_Build"
 $step = '{"name":"MSBuild payment-service","type":"simpleRunner","properties":{"property":[' +
         '{"name":"use.custom.script","value":"true"},' +
         '{"name":"script.content","value":"' + ($BuildCmd -replace '\\','\\') + '"},' +
         '{"name":"teamcity.step.mode","value":"default"}]}}'
-Rest POST "/app/rest/buildTypes/id:$bt/steps" $step | Out-Null
+$projOk = $false
+for ($i=0; $i -lt 30 -and -not $projOk; $i++){
+  Rest POST '/app/rest/projects' $projJson | Out-Null          # 200 create or 400/409 already-exists
+  if (RestGetOk "/app/rest/projects/id:$ProjectName"){ $projOk = $true; break }
+  Start-Sleep 5
+}
+Log ("project created: " + $projOk)
+if ($projOk){
+  for ($i=0; $i -lt 20 -and -not (RestGetOk "/app/rest/buildTypes/id:$bt"); $i++){ Rest POST '/app/rest/buildTypes' $btJson | Out-Null; Start-Sleep 4 }
+  Rest POST "/app/rest/buildTypes/id:$bt/steps" $step | Out-Null
+  Log ("build config: " + (RestGetOk "/app/rest/buildTypes/id:$bt"))
+}
 Log "server setup complete"
