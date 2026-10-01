@@ -264,7 +264,8 @@ ludus:
     cpus: 2
     windows:
       sysprep: false
-      install_additional_tools: true    # ILSpy / dnSpy / Process Hacker for M6 RE
+      # oscar_re_service installs the same toolset directly from the community feed;
+      # Nexus metadata can omit IsLatestVersion and make cached packages undiscoverable.
     domain:
       fqdn: oscar.local
       role: member
@@ -340,7 +341,7 @@ ludus:
       - gitlab.alpha.local
     roles:
       - alpha_gitlab_prereqs        # CUSTOM: ensure ca-certificates before GitLab install (curl --cacert)
-      - geerlingguy.gitlab          # Galaxy: GitLab CE omnibus (added by install-roles.sh)
+      - geerlingguy.gitlab          # Vendored Galaxy role: Ansible 2.19-compatible version conditional
       - alpha_gitlab_seed           # CUSTOM: project + crafted git history secret + masked CI vars + .gitlab-ci.yml
     role_vars:
       gitlab_domain: gitlab.alpha.local
@@ -400,7 +401,7 @@ ludus:
     template: debian-12-x64-server-template
     vlan: 50
     ip_last_octet: 25
-    ram_gb: 8
+    ram_gb: 16                     # Elastic 9.x + Fleet/Kibana exhaust an 8 GB guest
     cpus: 4
     linux: true
     roles:

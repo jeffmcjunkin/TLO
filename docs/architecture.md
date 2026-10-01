@@ -32,7 +32,7 @@ DNS at `10.3.<vlan>.254` on every VLAN.
 Octet convention: DC = `.10`, member servers = `.20–.29`, workstations = `.30–.49`,
 C2/appliances = `.50–.59`.
 
-## Host inventory (20 VMs + router)
+## Host inventory (19 VMs + router)
 
 | Host | IP | VLAN | Template | Domain role | Purpose / milestones |
 |---|---|---|---|---|---|
@@ -59,9 +59,9 @@ C2/appliances = `.50–.59`.
 > **`dd1.alpha` = `DC1-ALPHA`.** Read as the alpha.local domain controller (matching DC1.CHARLIE /
 > DC1.OSCAR), so M9's layered SQLi runs entirely on `ALPHA-SECRETS` via nested stored procedures.
 
-Approx. footprint: **~103 GB RAM / ~61 vCPU** across the 3-node cluster (~186 GB / 48 cores),
-sized small for dev/test. Shares the cluster with an existing GOAD range + other work, so monitor
-placement; trim `alpha-elastic` first if constrained.
+Approx. footprint: **~111 GB RAM / ~61 vCPU**, including the router.
+The Elastic 9.x stack needs the configured **16 GB**; the former 8 GB allocation exhausted
+guest memory and made the guest agent and SSH provisioning unreliable.
 
 ## Milestone → host → role map
 

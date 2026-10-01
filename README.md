@@ -36,7 +36,7 @@ Attacker  (Kali, Mythic C2)          10.3.10.0/24
 ```
 
 Three **separate** AD domains (no trusts) bridged by credential reuse + NTLM relay + C2 pivoting.
-20 VMs, ~103 GB RAM (dev/test sizing). Details: [`docs/architecture.md`](docs/architecture.md).
+19 machines plus the router, ~111 GB RAM (including 16 GB for Elastic). Details: [`docs/architecture.md`](docs/architecture.md).
 
 ## Deploy
 
@@ -45,13 +45,13 @@ Three **separate** AD domains (no trusts) bridged by credential reuse + NTLM rel
 export LUDUS_API_KEY=<key>
 LUDUS='ludus --url https://<server>:8080' ./scripts/install-roles.sh
 # 2. Apply config and deploy (~20 VMs, multi-hour)
-ludus range create -r TLO -n "The Last Ones"
-ludus range config set -f range-config.yml
-ludus range deploy
+ludus range create -r TLO -n "The Last Ones" --range-number 3
+ludus -r TLO range config set -f range-config.yml
+ludus -r TLO range deploy
 ```
 
 Full procedure: [`docs/deployment.md`](docs/deployment.md). Templates required: `win2022-server-x64`,
-`win11-22h2-x64-enterprise`, `debian-12-x64-server`, `kali-x64-desktop`.
+`win10-22h2-x64-enterprise`, `win11-22h2-x64-enterprise`, `debian-12-x64-server`, `kali-x64-desktop`.
 
 ## Validate
 
@@ -62,7 +62,7 @@ Snapshot first with `ludus testing start`, detonate, then `ludus testing stop` t
 
 ```
 range-config.yml     the Ludus range definition (single source of truth)
-roles/               17 custom Ansible roles (see roles/README.md)
+roles/               custom and vendored Ansible roles (see roles/README.md)
 scripts/             install-roles.sh
 docs/                attack-chain, architecture, deployment, validation
 reference/           the source paper (arXiv:2603.11214)

@@ -9,6 +9,25 @@ Two tiers of testing:
 
 IPs assume range number 3 (`10.3.<vlan>.<octet>`). Names resolve via the range router DNS.
 
+## Deployment smoke verification — sw / Ludus 2.4
+
+The unrestricted deployment started at `2026-10-01T02:32:27.296Z` completed with:
+
+- Range `TLO`, name `The Last Ones`, network `10.3.0.0/16`, state `SUCCESS`.
+- All 20 VMs powered on: 19 configured machines plus the router, 111 GB RAM total.
+- All 21 play-recap entries (including localhost): `failed=0`, `unreachable=0`, `ignored=0`.
+  `ludus -r TLO range errors` returned no errors.
+- HTTP 200 from the authenticated VPN portal, BookStack, OSCAR web, Mythic, HardHat,
+  GitLab, TeamCity, and Kibana status endpoint.
+- LDAP reachable on all three DCs, SQL TCP/1433 on both database servers, and Fleet TCP/8220.
+- Selected gate probes: Kali could reach the DMZ portal and HardHat UI, but not
+  CHARLIE BookStack or ALPHA GitLab directly. The VPN portal could reach BookStack;
+  HardHat could reach GitLab.
+- Kali's corrected ysoserial archive contained a PE32 .NET executable at
+  `/opt/tools/ysoserial.net/Release/ysoserial.exe`.
+
+These are deployment and service smoke checks, not a new execution of the full attack chain below.
+
 ## Per-milestone checks
 
 | Step | From | Command / action | Pass criteria |

@@ -2,12 +2,13 @@
 
 ## Prerequisites
 
-- A Ludus 2.2.x server (Proxmox backend) with the NFR/Pro entitlement (for the `ludus_*` Pro roles).
-- Built templates: `win2022-server-x64-template`, `win11-22h2-x64-enterprise-template`,
-  `debian-12-x64-server-template`, `kali-x64-desktop-template`.
+- A Ludus 2.4 server (Proxmox backend) with the NFR/Pro entitlement (for the `ludus_*` Pro roles).
+  Deployment fixes were exercised on 2.4.0-beta.1 with ansible-core 2.19.4.
+- Built templates: `win2022-server-x64-template`, `win10-22h2-x64-enterprise-template`,
+  `win11-22h2-x64-enterprise-template`, `debian-12-x64-server-template`, `kali-x64-desktop-template`.
   Build any missing one with `ludus templates build -n <name>` (Win11 takes ~1 hr).
 - The `ludus` client configured with your API key and `--url` (or run commands on the server).
-- ~103 GB RAM / ~61 vCPU of headroom across the cluster (dev/test sizing).
+- ~111 GB RAM / ~61 vCPU of headroom, including the router. Elastic requires 16 GB.
 
 ## 1. Install roles & collections
 
@@ -20,13 +21,20 @@ ludus ansible role list          # confirm all tlo_* / charlie_* / oscar_* / alp
 The custom roles are uploaded from `roles/` via `ludus ansible role add -d`. If your client runs on
 a different machine than the repo, copy `roles/` there first (or clone this repo where the client runs).
 
+The installer pins `ansible.windows` to 3.3.0 for ansible-core 2.19 compatibility.
+The vendored `roles/geerlingguy.gitlab` is based on Galaxy 3.2.0 (MIT license retained);
+its version-selection condition returns a boolean instead of relying on string truthiness.
+Do not replace it with the unmodified Galaxy release on ansible-core 2.19.
+
 ## 2. Create the range & apply config
 
 ```bash
-ludus range create -r TLO -n "The Last Ones"      # once; assigns the range network (e.g. 10.3.0.0/16)
-ludus range default set TLO
-ludus range config set -f range-config.yml
+ludus range create -r TLO -n "The Last Ones" --range-number 3
+ludus -r TLO range config set -f range-config.yml
 ```
+
+Range number 3 must be available: the role defaults and validation commands use `10.3.x.x`.
+Use `-r TLO` on subsequent commands, or explicitly set `ludus range default set TLO`.
 
 ## 3. Deploy
 
@@ -119,6 +127,29 @@ ludus range rm-range       # delete the range entirely
 
 ## Troubleshooting
 
+- **SQL setup rejects `//{%`, or Windows files contain raw Jinja** — `ansible.windows` 2.7
+  cannot render templates correctly with ansible-core 2.19. Run the updated installer, then
+  rerun all user-defined roles to replace affected files. The
+  [upstream 3.0.0 release notes](https://github.com/ansible-collections/ansible.windows/blob/main/CHANGELOG.rst#v300)
+  document the template data-tagging support; this repository pins 3.3.0.
+- **Additional Windows tools are missing from the Nexus feed** — `oscar_re_service` installs
+  the complete workstation toolset directly from the Chocolatey community feed. Keep
+  `windows.install_additional_tools` unset on OPERATOR-WS1 so the earlier Nexus-backed phase
+  does not abort deployment.
+- **GitLab reports “Conditionals must have a boolean result”** — reinstall the vendored
+  `geerlingguy.gitlab` role through `scripts/install-roles.sh`.
+- **Elastic becomes unresponsive or inventory loses its Debian connection settings** — check
+  guest memory and the QEMU guest agent. The Elastic 9.x stack exhausted the former 8 GB
+  allocation without swap; use the configured 16 GB. Existing VMs need their Proxmox memory
+  updated and a shutdown/start to apply it.
+- **Sysprep connection errors appear in `range errors`** — inspect the final play recap.
+  Expected reboot disconnects may have been rescued; `failed=0` and `unreachable=0` distinguish
+  these from an actual deployment blocker.
+- **Kali reports a successful deployment but ysoserial is missing** — the
+  [v1.36 release](https://github.com/pwntester/ysoserial.net/releases/tag/v1.36) uses a
+  commit-named ZIP, not `ysoserial-1.36.zip`, and extracts to `Release/ysoserial.exe`.
+  The corrected role stages `/opt/tools/ysoserial.net/Release/ysoserial.exe` and treats
+  archive download or extraction failures as fatal.
 - **SDN apply timeout on deploy/create** — a cluster node is unhealthy; check `pvecm status` and node
   reachability, recover the node, retry.
 - **Early `Timeout when waiting for <ip>:5986` / range unreachable from the server (cluster mode)** — if

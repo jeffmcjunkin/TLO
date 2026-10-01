@@ -1,5 +1,36 @@
 ---
 # Runs on OPERATOR-WS1. Renders + executes the build script that plants the RE crackme service.
+- name: Install workstation analysis tools from the upstream package feed
+  chocolatey.chocolatey.win_chocolatey:
+    name:
+      - networkmonitor
+      - wireshark
+      - firefox
+      - vscode
+      - processhacker
+      - 7zip
+      - burp-suite-free-edition
+      - explorersuite
+      - ilspy
+      - croc
+    source: https://community.chocolatey.org/api/v2/
+    state: present
+
+- name: Install Google Chrome
+  chocolatey.chocolatey.win_chocolatey:
+    name: googlechrome
+    source: https://community.chocolatey.org/api/v2/
+    # This package downloads the current upstream release rather than a fixed MSI.
+    ignore_checksums: true
+    state: present
+
+- name: Install Sysinternals tools
+  chocolatey.chocolatey.win_chocolatey:
+    name: sysinternals
+    source: https://community.chocolatey.org/api/v2/
+    package_params: /InstallDir:C:\Tools
+    state: present
+
 - name: Render the RE service build script
   ansible.windows.win_template:
     src: build_re_service.ps1.j2

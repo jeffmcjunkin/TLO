@@ -122,8 +122,6 @@
   retries: 2
   delay: 5
   until: tlo_archive_dl is succeeded
-  # Non-fatal: internet may be flaky. Re-run the role to pick up any misses.
-  ignore_errors: true
 
 - name: Unpack release archives (idempotent via creates marker)
   become: true
@@ -135,7 +133,6 @@
   loop: "{{ tlo_release_archives }}"
   loop_control:
     label: "{{ item.name }}"
-  failed_when: false
 
 # --- Single-file binaries ---
 - name: Download single-file release binaries

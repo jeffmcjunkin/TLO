@@ -11,11 +11,14 @@ set -uo pipefail
 LUDUS="${LUDUS:-ludus}"
 
 echo "==> Collections"
+# ansible-core 2.19 requires data-tagging support in win_template. Older Windows
+# collections silently copy raw Jinja into SQL configuration and PowerShell files.
+$LUDUS ansible collection add ansible.windows --version 3.3.0 -f || exit 1
 $LUDUS ansible collection add badsectorlabs.ludus_windows_utils || true   # LAPS / AD ACL helpers
 $LUDUS ansible collection add microsoft.iis || true                       # IIS modules (oscar_vulnweb)
 
 echo "==> Off-the-shelf Galaxy roles"
-for r in geerlingguy.docker geerlingguy.pip gantsign.golang geerlingguy.gitlab e1a.ludus_windows_smb_share; do
+for r in geerlingguy.docker geerlingguy.pip gantsign.golang e1a.ludus_windows_smb_share; do
   $LUDUS ansible role add "$r" || true
 done
 

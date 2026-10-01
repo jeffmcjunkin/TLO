@@ -66,9 +66,9 @@ tlo_release_archives:
   # ysoserial.net — .NET deserialization gadget generator (M5 ViewState RCE).
   # https://github.com/pwntester/ysoserial.net
   - name: ysoserial.net
-    url: "https://github.com/pwntester/ysoserial.net/releases/download/v1.36/ysoserial-1.36.zip"
+    url: "https://github.com/pwntester/ysoserial.net/releases/download/v1.36/ysoserial-1dba9c4416ba6e79b6b262b758fa75e2ee9008e9.zip"
     dest_dir: "/opt/tools/ysoserial.net"
-    unpacked_marker: "/opt/tools/ysoserial.net/ysoserial.exe"
+    unpacked_marker: "/opt/tools/ysoserial.net/Release/ysoserial.exe"
     # checksum: "sha256:..."   # optional pin
 
 # Single-file binaries: downloaded straight to `dest`.
