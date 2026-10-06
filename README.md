@@ -68,6 +68,12 @@ docs/                attack-chain, architecture, deployment, validation
 reference/           the source paper (arXiv:2603.11214)
 ```
 
+## Acknowledgments
+
+- **Erik ([@kernel-sanders](https://github.com/kernel-sanders)) of [Bad Sector Labs](https://github.com/badsectorlabs)** —
+  Ludus 2.4 / ansible-core 2.19 deployment fixes and a full-range deployment verification.
+- Built on [Ludus](https://ludus.cloud), by Bad Sector Labs.
+
 ---
 
 > **Safety.** Every host here is *intentionally vulnerable*. Deploy only on an isolated, authorized
