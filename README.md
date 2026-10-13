@@ -1,11 +1,18 @@
-# The Last Ones (TLO)
+# The Last Ones (TLO) — Independent Ludus Recreation
 
-A multi-domain Active Directory cyber range for [Ludus](https://ludus.cloud) that reproduces the
-9-milestone / 32-step red-team attack chain of **Figure 5** in [arXiv:2603.11214](https://arxiv.org/abs/2603.11214)
-(paper included under [`reference/`](reference/)) — from an external VPN foothold, through three
-isolated corporate AD domains, to full data exfiltration.
+An independent recreation of the **idea of “The Last Ones”** as a multi-domain Active Directory
+cyber range for [Ludus](https://ludus.cloud). **This is not the original “The Last Ones” environment
+or its official implementation.**
 
-Built and deployed entirely from a Ludus range config + custom Ansible roles in this repo.
+This project uses the description in the [arXiv:2603.11214 paper](https://arxiv.org/abs/2603.11214)
+([PDF included in this repo](reference/the-last-ones-arxiv-2603.11214.pdf)) as a blueprint for building
+a new Ludus range. In particular, **Figure 5** describes a 9-milestone / 32-step red-team attack
+chain — from an external VPN foothold, through three isolated corporate AD domains, to full data
+exfiltration — that this implementation aims to recreate.
+
+The Ludus configuration and Ansible roles in this repo supply the implementation details needed
+to turn that description into a deployable range. Those choices are this project's interpretation
+of the paper, not a claim of exact equivalence to the original environment.
 
 ## Attack chain (9 milestones)
 
