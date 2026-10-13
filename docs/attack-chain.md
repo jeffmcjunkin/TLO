@@ -3,6 +3,11 @@
 > **Source.** This is a faithful transcription of *Figure 5, "Attack chain details,"* page 13 of
 > the paper archived at [arXiv:2603.11214](https://arxiv.org/abs/2603.11214). A copy of the paper
 > is included at [`reference/the-last-ones-arxiv-2603.11214.pdf`](../reference/the-last-ones-arxiv-2603.11214.pdf).
+> **License and attribution.** Linus Folkerts et al., *Measuring AI Agents' Progress on
+> Multi-Step Cyber Attack Scenarios* (2026), [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+> See [full author attribution](../THIRD_PARTY_NOTICES.md#paper-and-figure-5).
+> This document reformats/transcribes Figure 5 and adds the implementation mappings and
+> interpretation notes below; the source material is not relicensed under MIT.
 > Figure caption (verbatim): *"Attack chain for 'The Last Ones.' The 32 steps are grouped into 9
 > milestones spanning reconnaissance, lateral movement, credential theft, reverse engineering, C2
 > exploitation, supply chain compromise, and final data exfiltration across a multi-domain corporate network."*

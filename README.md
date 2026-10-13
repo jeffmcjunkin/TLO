@@ -51,9 +51,13 @@ Three **separate** AD domains (no trusts) bridged by credential reuse + NTLM rel
 # 1. Install roles + collections onto your Ludus server
 export LUDUS_API_KEY=<key>
 LUDUS='ludus --url https://<server>:8080' ./scripts/install-roles.sh
-# 2. Apply config and deploy (~20 VMs, multi-hour)
+# 2. Copy the config and set network.always_blocked_networks to your actual
+#    management/host networks. The committed subnet is ONLY an example.
+cp range-config.yml range-config.local.yml
+# Edit range-config.local.yml before continuing.
+# 3. Apply config and deploy (~20 VMs, multi-hour)
 ludus range create -r TLO -n "The Last Ones" --range-number 3
-ludus -r TLO range config set -f range-config.yml
+ludus -r TLO range config set -f range-config.local.yml
 ludus -r TLO range deploy
 ```
 
@@ -74,6 +78,13 @@ scripts/             install-roles.sh
 docs/                attack-chain, architecture, deployment, validation
 reference/           the source paper (arXiv:2603.11214)
 ```
+
+## License
+
+Except where otherwise noted, original TLO code and documentation are licensed under
+[MIT](LICENSE). Six included roles remain **GPL-3.0-or-later**; third-party code and the
+paper retain their own licenses. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
+for exact scopes, attribution, and separately installed dependencies.
 
 ## Acknowledgments
 

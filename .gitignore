@@ -5,6 +5,9 @@
 wg*.conf
 secrets.local.*
 .env
+.env.*
+range-config.local.yml
+*.bundle
 
 # Ansible
 *.retry

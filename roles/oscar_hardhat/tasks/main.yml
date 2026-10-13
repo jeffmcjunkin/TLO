@@ -24,6 +24,15 @@
     dest: "{{ hardhat_dir }}/patch_teamserver.py"
     mode: "0755"
 
+- name: Preserve licenses for the adapted compose and compile-fix script
+  ansible.builtin.copy:
+    src: "{{ role_path }}/{{ item.src }}"
+    dest: "{{ hardhat_dir }}/{{ item.dest }}"
+    mode: "0644"
+  loop:
+    - { src: LICENSE, dest: COPYING.GPL-3.0 }
+    - { src: BSD-3-Clause.txt, dest: BSD-3-Clause.txt }
+
 # V0.3.03-Alpha's teamserver does not compile (interface-vs-base-class type errors in
 # the Ext_Implants plugin base). The patch adds the two explicit downcasts. Idempotent.
 - name: Patch the teamserver so it compiles (CS1061/CS0266 in ExtImplantHandleComms_Base.cs)

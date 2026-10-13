@@ -6,7 +6,7 @@
   The NSIS /S silent install only lays down files: it does NOT create conf/server.xml,
   register the Windows services, or complete the first-run wizard. This script does all
   of that unattended:
-    1. writes conf/server.xml (plain-HTTP :8111) if missing
+    1. derives conf/server.xml from the installed distribution for $Port if missing
     2. installs + starts the "TeamCity" server service via TeamCityService.exe
     3. drives the first-run maintenance wizard (data dir -> internal HSQLDB -> EULA)
     4. creates a system admin, the build project + config + MSBuild step (super-user token)
@@ -33,15 +33,8 @@ $PSDefaultParameterValues['Invoke-RestMethod:UseBasicParsing'] = $true
 $base = "http://localhost:$Port"
 function Log($m){ Write-Host "[setup_teamcity] $m" }
 
-# ---- 1. server.xml (role copies files/server.xml to conf\; fallback: derive from sample) ----
-$serverXml = Join-Path $InstallDir 'conf\server.xml'
-if (-not (Test-Path $serverXml)) {
-  $sample = Join-Path $InstallDir 'conf\server-https-proxy.xml'
-  if (Test-Path $sample) {
-    (Get-Content $sample -Raw) -replace '\s*scheme="https"\s*secure="true"','' | Set-Content $serverXml -Encoding UTF8
-    Log "generated conf\server.xml from sample"
-  } else { throw "no server.xml and no sample to derive it from" }
-}
+# ---- 1. configure Tomcat from the locally installed distribution, preserving existing config ----
+& (Join-Path $PSScriptRoot 'configure_server.ps1') -InstallDir $InstallDir -Port $Port
 
 # ---- 2. install + start the server service ----
 if (-not (Get-Service -Name 'TeamCity' -ErrorAction SilentlyContinue)) {

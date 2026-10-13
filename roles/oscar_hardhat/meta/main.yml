@@ -1,4 +1,6 @@
 ---
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 Jeff McJunkin and contributors
 # oscar_hardhat — TLO training range (oscar.local)
 # Deploys the open-source HardHat C2 project (DragoQCC/HardHatC2) via Docker as the
 # "C2 management service" of Milestone 6/7. Isolated authorized-lab use only.

@@ -1,4 +1,6 @@
 ---
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 Jeff McJunkin and contributors
 # alpha_gitlab_prereqs — ensure the CA bundle exists before geerlingguy.gitlab runs.
 # The GitLab repo-setup script calls `curl --cacert /etc/ssl/certs/ca-certificates.crt`,
 # which fails (curl 77) if ca-certificates isn't installed on the Debian template.

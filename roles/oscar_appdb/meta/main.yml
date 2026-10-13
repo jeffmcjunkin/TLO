@@ -1,4 +1,6 @@
 ---
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 Jeff McJunkin and contributors
 # oscar_appdb — TLO training range (oscar.local)
 # Creates the application database the deliberately-vulnerable web app queries in
 # Milestone 5. Isolated lab use only.

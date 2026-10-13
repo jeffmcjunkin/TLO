@@ -1,4 +1,6 @@
 ---
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 Jeff McJunkin and contributors
 # oscar_vulnweb — TLO training range (oscar.local)
 # Deploys a deliberately-vulnerable ASP.NET WebForms training app (SQL injection sink +
 # static/leaked machineKey for ViewState practice) on IIS. Milestone 5. Isolated lab only.

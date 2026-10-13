@@ -28,9 +28,18 @@ Do not replace it with the unmodified Galaxy release on ansible-core 2.19.
 
 ## 2. Create the range & apply config
 
+Copy `range-config.yml` to the ignored `range-config.local.yml`. **Before deployment,
+replace `network.always_blocked_networks` with all actual management/host network CIDRs.**
+The committed `198.51.100.0/24` is a documentation-only example; it does not protect your
+real infrastructure. Keep site-specific endpoints and credentials out of tracked files.
+The config still permits outbound internet for provisioning; use an isolated deployment
+network and the testing controls described below.
+
 ```bash
+cp range-config.yml range-config.local.yml
+# Edit network.always_blocked_networks in range-config.local.yml before continuing.
 ludus range create -r TLO -n "The Last Ones" --range-number 3
-ludus -r TLO range config set -f range-config.yml
+ludus -r TLO range config set -f range-config.local.yml
 ```
 
 Range number 3 must be available: the role defaults and validation commands use `10.3.x.x`.
@@ -175,3 +184,24 @@ ludus range rm-range       # delete the range entirely
 - **Domain-joined Windows can't resolve** — expected if its DC has `block_internet` mismatched; see the
   testing notes in the Ludus docs.
 - General Ludus issues: the `troubleshooting` skill / https://docs.ludus.cloud.
+
+## TeamCity configuration and regression check
+
+On a fresh installation, `configure_server.ps1` derives `conf/server.xml` from the
+locally installed `conf/server-https-proxy.xml`, preserves vendor comments, removes
+reverse-proxy attributes from the non-TLS HTTP connector, and sets `alpha_teamcity_port`.
+Existing `server.xml` files are preserved byte-for-byte; manually reconcile a port
+change on an existing installation. Missing, malformed, or ambiguous source configuration
+fails before service startup. The repository does not redistribute the vendor configuration.
+
+Run `pwsh -NoProfile -File validation/teamcity_config.tests.ps1` for isolated configuration
+regressions (PowerShell 7 or Windows PowerShell 5.1). A fresh Windows installation must
+also verify TeamCity service startup and HTTP readiness; the local configuration checks
+do not replace that integration test.
+
+## After the pre-release history rewrite
+
+Existing clones contain superseded history and should be archived privately and replaced
+with fresh clones. Do not merge or push old branches/tags into the rewritten repository.
+Transfer any needed unpublished edits as reviewed patches, excluding personal settings
+and removed vendor files. Private backups are not release assets.

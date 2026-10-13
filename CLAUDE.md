@@ -47,5 +47,5 @@ the testing purpose. When in doubt, assume the operator can see it and keep it c
 
 ## Deploy/validate quick reference
 - Ludus auth: set `LUDUS_API_KEY` privately and use `ludus --url https://<server>:8080 <cmd>`.
-- Set config: `ludus range config set -f range-config.yml`; deploy roles: `ludus range deploy -t user-defined-roles [-l "TLO-alpha-*"]`.
+- Set config: `ludus range config set -f range-config.local.yml`; deploy roles: `ludus range deploy -t user-defined-roles [-l "TLO-alpha-*"]`.
 - See `docs/deployment.md` for the cluster route quirk and troubleshooting; `docs/validation.md` for the per-milestone checks.

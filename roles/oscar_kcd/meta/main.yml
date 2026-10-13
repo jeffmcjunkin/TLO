@@ -1,4 +1,6 @@
 ---
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 Jeff McJunkin and contributors
 # oscar_kcd — TLO training range (oscar.local)
 # Creates the domain service/admin accounts and configures Kerberos constrained
 # delegation used by Milestone 5 of "The Last Ones" training range. Isolated lab use only.

@@ -1,4 +1,6 @@
 ---
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 Jeff McJunkin and contributors
 # oscar_re_service — TLO training range (oscar.local)
 # Plants a benign .NET "crackme" Windows service on OPERATOR-WS1 for the Milestone-6
 # reverse-engineering exercise: it AES-decrypts an embedded string using a key stored under a
